@@ -2,6 +2,7 @@ package hopper
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -251,6 +252,22 @@ func TestRunnerUniqueIndex(t *testing.T) {
 			t.Errorf("duplicate value %v in unique-indexed column Nickname", nick)
 		}
 		seen[nick] = true
+	}
+}
+
+func TestRunnerSetOverridesUnique(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, err := ConfigFromFlags([]string{"Singers=5"}, []string{"Singers.Nickname=nick-{{ Index }}"})
+	if err != nil {
+		t.Fatalf("ConfigFromFlags: %v", err)
+	}
+
+	m := genTables(t, r, cfg)
+	for i, row := range m["Singers"].generated {
+		want := fmt.Sprintf("nick-%d", i)
+		if row["Nickname"] != want {
+			t.Errorf("Nickname = %v, want %q (--set must override the unique-index auto value)", row["Nickname"], want)
+		}
 	}
 }
 
