@@ -62,8 +62,9 @@ When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credential
 | `hopper version`           | print the version |
 
 The rest of this README covers `run`, the main command. Run `hopper <command> --help`
-for the full set of flags. While loading, `run` prints per-table progress
-(`Table  inserted/total`) to stderr.
+for the full set of flags. While loading, `run` shows a per-table progress bar on
+stderr (`Loading Albums [████████░░░░░░░░░░░░] 40% (400/1000)`); when stderr is not a
+terminal it prints one summary line per table instead.
 
 ## Tables and row counts
 

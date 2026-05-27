@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -68,8 +69,19 @@ var (
 			runner.Infer = !noInfer
 			runner.Truncate = truncate
 			runner.NullRate = nullRate
+			tty := isTerminal(os.Stderr)
 			runner.Progress = func(table string, done, total int) {
-				fmt.Fprintf(os.Stderr, "\r%-24s %d/%d", table, done, total)
+				if !tty {
+					if done >= total {
+						fmt.Fprintf(os.Stderr, "%s  %d rows\n", table, done)
+					}
+					return
+				}
+				ratio := 0.0
+				if total > 0 {
+					ratio = float64(done) / float64(total)
+				}
+				fmt.Fprintf(os.Stderr, "\rLoading %-16s [%s] %3.0f%%  (%d/%d)", table, progressBar(ratio), ratio*100, done, total)
 				if done >= total {
 					fmt.Fprintln(os.Stderr)
 				}
@@ -110,6 +122,27 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 		return nil, fmt.Errorf("specify --config or at least one --table")
 	}
 	return config, nil
+}
+
+const progressBarWidth = 20
+
+func progressBar(ratio float64) string {
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	filled := int(ratio * progressBarWidth)
+	return strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func init() {
