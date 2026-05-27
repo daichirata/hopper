@@ -124,8 +124,9 @@ columns get a single templated element (or a few random ones by default).
 ## Configuration file
 
 For anything non-trivial, use a YAML file. Generate a starting point with
-`hopper scaffold DATABASE [--table T]` (it fills in the name-inferred columns and
-skips primary keys / generated columns), then edit it and pass it with `--config`:
+`hopper scaffold DATABASE [--table T]` (it fills in the name-inferred columns, lists
+generated columns as comments, and skips primary keys), then edit it and pass it with
+`--config`:
 
 ```yaml
 tables:

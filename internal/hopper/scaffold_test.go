@@ -22,8 +22,8 @@ func TestScaffold(t *testing.T) {
 	if strings.Contains(out, "SingerId") {
 		t.Error("primary key SingerId should be omitted")
 	}
-	if strings.Contains(out, "FullName") {
-		t.Error("generated column FullName should be omitted")
+	if !strings.Contains(out, "# FullName:") {
+		t.Errorf("generated column FullName should be listed as a comment:\n%s", out)
 	}
 
 	cfg, err := ConfigFromYAML([]byte(out))

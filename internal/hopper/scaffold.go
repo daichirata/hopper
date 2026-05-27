@@ -19,26 +19,36 @@ func Scaffold(schema *Schema, tables []string, gen *Generator) (string, error) {
 		b.WriteString("    rows: 100\n")
 
 		suggestions := map[string]string{}
+		var generated []string
 		for _, c := range t.Columns {
-			if c.Generated || t.IsPrimaryKey(c.Name) {
+			if t.IsPrimaryKey(c.Name) {
+				continue
+			}
+			if c.Generated {
+				generated = append(generated, c.Name)
 				continue
 			}
 			if tmpl, ok := gen.Suggest(c); ok {
 				suggestions[c.Name] = tmpl
 			}
 		}
-		if len(suggestions) == 0 {
+		if len(suggestions) == 0 && len(generated) == 0 {
 			continue
 		}
+
+		b.WriteString("    columns:\n")
 		names := make([]string, 0, len(suggestions))
 		for name := range suggestions {
 			names = append(names, name)
 		}
 		sort.Strings(names)
-
-		b.WriteString("    columns:\n")
 		for _, name := range names {
 			fmt.Fprintf(&b, "      %s: %q\n", name, suggestions[name])
+		}
+
+		sort.Strings(generated)
+		for _, name := range generated {
+			fmt.Fprintf(&b, "      # %s:  # generated column (filled by Spanner)\n", name)
 		}
 	}
 	return b.String(), nil
