@@ -189,3 +189,52 @@ func TestRunnerForeignKeyAutoComplete(t *testing.T) {
 		}
 	}
 }
+
+func TestRunnerThreeLevelInterleave(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, err := ConfigFromFlags([]string{"Singers=3", "Albums=6", "Songs=24"}, nil)
+	if err != nil {
+		t.Fatalf("ConfigFromFlags: %v", err)
+	}
+
+	m := genTables(t, r, cfg)
+	if got := len(m["Songs"].generated); got != 24 {
+		t.Errorf("Songs rows = %d, want 24", got)
+	}
+
+	singerIDs := map[any]bool{}
+	for _, row := range m["Singers"].generated {
+		singerIDs[row["SingerId"]] = true
+	}
+	for _, row := range m["Albums"].generated {
+		if !singerIDs[row["SingerId"]] {
+			t.Error("Album SingerId not found among Singers")
+		}
+	}
+
+	albumKeys := map[[2]any]bool{}
+	for _, row := range m["Albums"].generated {
+		albumKeys[[2]any{row["SingerId"], row["AlbumId"]}] = true
+	}
+	for _, row := range m["Songs"].generated {
+		if !albumKeys[[2]any{row["SingerId"], row["AlbumId"]}] {
+			t.Error("Song parent (SingerId, AlbumId) not found among Albums")
+		}
+	}
+}
+
+func TestRunnerThreeLevelAutoComplete(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Songs=24"}, nil)
+
+	m := genTables(t, r, cfg)
+	if got := len(m["Singers"].generated); got != 1 {
+		t.Errorf("auto-completed Singers = %d, want 1", got)
+	}
+	if got := len(m["Albums"].generated); got != 1 {
+		t.Errorf("auto-completed Albums = %d, want 1", got)
+	}
+	if got := len(m["Songs"].generated); got != 24 {
+		t.Errorf("Songs rows = %d, want 24", got)
+	}
+}
