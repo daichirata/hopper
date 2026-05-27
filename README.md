@@ -3,10 +3,9 @@
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
 
 It reads the schema directly from the target database, fills every column with a
-type-appropriate random value by default, and lets you override individual
-columns with [gofakeit](https://github.com/brianvoe/gofakeit) templates.
-Interleaved tables are handled automatically: child rows are distributed across
-their parents and inherit the parent's primary key.
+type-appropriate random value by default, and lets you override individual columns
+with [gofakeit](https://github.com/brianvoe/gofakeit) templates. Interleaved and
+foreign-key relationships are handled automatically.
 
 The examples below use the [Spanner sample schema](https://cloud.google.com/spanner/docs/schema-and-data-model) (`Singers` → `Albums` → `Songs`, interleaved).
 
@@ -35,57 +34,49 @@ The database is given as a `spanner://` DSN:
 spanner://projects/{projectId}/instances/{instanceId}/databases/{databaseName}?credentials=/path/to/keyfile.json
 ```
 
-| Param          | Required | Description                                                                  |
-|----------------|----------|------------------------------------------------------------------------------|
-| `projectId`    | true     | The Google Cloud Platform project id                                         |
-| `instanceId`   | true     | The id of the instance running Spanner                                       |
-| `databaseName` | true     | The name of the Spanner database                                             |
-| `credentials`  | false    | The path to the keyfile. If not present, the client uses your default application credentials. |
+| Param          | Required | Description                                                              |
+|----------------|----------|--------------------------------------------------------------------------|
+| `projectId`    | true     | The Google Cloud Platform project id                                     |
+| `instanceId`   | true     | The id of the instance running Spanner                                   |
+| `databaseName` | true     | The name of the Spanner database                                         |
+| `credentials`  | false    | Path to the keyfile. If omitted, the default application credentials are used. |
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
 
-## Specifying tables and counts
+## Tables and row counts
 
-Each `--table TABLE=N` (repeatable) sets the **total** number of rows for a table:
+`--table TABLE=N` (repeatable) sets the **total** number of rows for a table:
 
 ```
 --table 'Singers=10'
 --table 'Albums=1000'
 ```
 
-Parent/child relationships come from the schema's `INTERLEAVE` clauses. Child rows
-are distributed across their parents round-robin and inherit the parent's primary
-key, so the two flags above produce 1000 Albums spread over 10 Singers (~100 each).
-To control "rows per parent", choose the totals accordingly:
+Parent/child relationships are read from the schema, so you only provide counts:
 
-```
---table 'Singers=10' --table 'Albums=1000'   # ~100 Albums per Singer
---table 'Singers=10' --table 'Albums=300'    # ~30 Albums per Singer
-```
-
-### Auto-completing parents
-
-If you specify a child table on its own, hopper automatically creates the parent
-chain (one row each) so the interleave constraints are satisfied:
-
-```
-hopper run spanner://... --table 'Albums=300'
-# -> creates 1 Singers row and 300 Albums interleaved under it
-```
-
-### Foreign keys
-
-`FOREIGN KEY` constraints are treated as dependencies too: referenced tables are
-generated first (and auto-completed if unspecified), and each FK column takes its
-value from a random row of the referenced table, so referential integrity holds.
+- **Interleaved** (`INTERLEAVE IN PARENT`) and **foreign-key** tables are generated
+  parent-first. Interleaved children inherit the parent's primary key; FK columns
+  reference a random row of the parent — so referential integrity always holds.
+- Children are distributed across their parents **round-robin**. `Singers=10` +
+  `Albums=1000` gives ~100 Albums per Singer; choose the totals to set the ratio
+  (`Albums=300` → ~30 each).
+- Naming only a child **auto-completes its parents** (one row each):
+  `--table 'Albums=300'` creates 1 Singer with 300 Albums under it.
 
 ## Column values
 
-By default every column gets a type-appropriate random value, and primary key
-columns get a collision-free unique value (UUID for STRING, sequential for
-INT64, and so on). Generated/stored columns are skipped automatically.
+Every column is filled automatically; use `--set` to override specific ones.
 
-Override a column with `--set TABLE.COLUMN=TEMPLATE`, where TEMPLATE is a
+**Defaults** — when a column has no `--set`:
+
+- **Primary keys** get a collision-free unique value (UUID for STRING, sequential for INT64, …).
+- **Other columns** are inferred from the column name when it matches a gofakeit
+  function (`Email`, `FirstName`, `Phone`, …); otherwise a type-appropriate random
+  value is used. Add `--no-infer` to disable name inference.
+- **Generated / stored** columns are skipped.
+- `--null-rate` (0–1) randomly leaves nullable columns NULL.
+
+**Overrides** — `--set TABLE.COLUMN=TEMPLATE`, a
 [gofakeit](https://github.com/brianvoe/gofakeit#templates) template using `{{ }}`:
 
 ```
@@ -94,52 +85,30 @@ Override a column with `--set TABLE.COLUMN=TEMPLATE`, where TEMPLATE is a
 --set 'Singers.LastName={{ FirstName }}-{{ Index }}'
 ```
 
-`TABLE` is matched by name, so the leaf table name is enough (`Albums.MarketingBudget`),
-whether or not the table is interleaved.
+`TABLE` is matched by name, so the leaf table name is enough. Common building blocks:
 
-### Template building blocks
+| Template                                       | Result                                    |
+|------------------------------------------------|-------------------------------------------|
+| `{{ Number 0 100 }}`                           | random integer in a range                 |
+| `{{ Float64 }}`                                | random float                              |
+| `{{ LetterN 12 }}`                             | 12 random letters                         |
+| `{{ Regex "[A-Z0-9]{8}" }}`                    | string matching a regex                   |
+| `{{ UUID }}`                                   | a UUID                                    |
+| `{{ RandomString (SliceString "a" "b" "c") }}` | pick one of the values                    |
+| `{{ FirstName }}` `{{ Email }}` `{{ Phone }}`  | realistic fake data                       |
+| `{{ Sentence 5 }}`                             | a 5-word sentence                         |
+| `{{ Index }}`                                  | row sequence number (0-based)             |
+| `{{ add Index 1 }}`                            | arithmetic: `add` `sub` `mul` `div` `mod` |
 
-Any [gofakeit function](https://github.com/brianvoe/gofakeit#functions) works inside
-`{{ }}`. Common ones:
+`{{ Index }}` and the arithmetic helpers are hopper additions; everything else is a
+gofakeit function (any [gofakeit function](https://github.com/brianvoe/gofakeit#functions)
+works). Templates can be combined (`{{ FirstName }}-{{ Index }}`), and the result is
+converted to the column's type — use a numeric template for numeric columns. ARRAY
+columns get a single templated element (or a few random ones by default).
 
-| Template                                     | Result                                |
-|----------------------------------------------|---------------------------------------|
-| `{{ Number 0 100 }}`                         | random integer in a range             |
-| `{{ Float64 }}`                              | random float                          |
-| `{{ LetterN 12 }}`                           | 12 random letters                     |
-| `{{ Regex "[A-Z0-9]{8}" }}`                  | string matching a regex               |
-| `{{ UUID }}`                                 | a UUID                                |
-| `{{ RandomString (SliceString "a" "b" "c") }}` | pick one of the given values        |
-| `{{ FirstName }}` `{{ Email }}` `{{ Phone }}` `{{ Company }}` | realistic fake data |
-| `{{ Sentence 5 }}`                           | a 5-word sentence                     |
-| `{{ Index }}`                                | row sequence number (0-based)         |
-| `{{ add Index 1 }}`                          | arithmetic: `add` `sub` `mul` `div` `mod` |
+## Configuration file
 
-`{{ Index }}` is added by hopper (the current row index); everything else is a
-gofakeit function. Go templates have no infix operators, so use `{{ add Index 1 }}`
-(also `sub` / `mul` / `div` / `mod`) rather than `{{ Index + 1 }}`. Templates can be
-combined (`{{ FirstName }}-{{ Index }}`). The rendered string is converted to the
-column's type, so use a numeric template (`{{ Number ... }}`) for numeric columns.
-
-### Inferring from column names
-
-By default, any unset STRING/BYTES column whose name matches a gofakeit function
-is filled with that function automatically: `Email` → emails, `FirstName` →
-first names, and likewise `Phone`, `Company`, `City`, `Country`, … Names are
-matched case-insensitively, ignoring underscores (`first_name` matches
-`FirstName`). Explicit `--set` always wins, primary keys keep their unique
-values, and anything unmatched — or whose value would not fit the column's
-declared size — falls back to the type default. Pass `--no-infer` to disable it.
-
-### NULL values
-
-`--null-rate` (0–1) randomly leaves nullable, unset columns NULL. Primary keys,
-inherited / FK columns and explicit `--set` values are never nulled.
-
-## Config file
-
-For anything non-trivial, use a YAML file (`--config hopper.yaml`) — a flat list of
-tables with row counts and column templates:
+For anything non-trivial, put the same model in a YAML file (`--config hopper.yaml`):
 
 ```yaml
 tables:
@@ -153,26 +122,22 @@ tables:
     columns:
       AlbumTitle: "{{ Sentence 3 }}"
       MarketingBudget: "{{ Number 0 1000000 }}"
-    # SingerId and other parent keys are inherited automatically.
 ```
 
-`--config` can be combined with `--table` / `--set`, which override or extend the
-YAML (handy for bumping a row count or tweaking one column without editing the file).
-
-ARRAY columns get a few random elements by default, or a single templated element
-when you `--set` one.
+`--config` can be combined with `--table` / `--set`, which override or extend it —
+handy for bumping a count or tweaking one column without editing the file.
 
 ## Flags
 
 ```
--c, --config string   path to a YAML config file
-    --table           rows to generate as TABLE=N            (repeatable)
-    --set             column template as TABLE.COLUMN=TEMPLATE (repeatable)
-    --seed int        random seed (0 = time-based)
-    --dry-run         generate rows but do not insert (prints a few sample rows)
-    --no-infer        disable inferring a gofakeit function from column names
-    --truncate        delete existing rows from each target table before loading
-    --null-rate float probability (0-1) of leaving a nullable, unset column NULL
+-c, --config string     path to a YAML config file
+    --table             total rows as TABLE=N                  (repeatable)
+    --set               column template as TABLE.COLUMN=TEMPLATE (repeatable)
+    --truncate          delete existing rows from each table before loading
+    --null-rate float   probability (0-1) of leaving a nullable column NULL
+    --no-infer          disable inferring a gofakeit function from column names
+    --seed int          random seed (0 = time-based)
+    --dry-run           generate rows but do not insert (prints a few sample rows)
 ```
 
 ## Development
