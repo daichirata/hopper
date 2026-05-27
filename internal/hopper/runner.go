@@ -22,6 +22,7 @@ type Runner struct {
 	gen    *Generator
 	client *Client
 	DryRun bool
+	Infer  bool
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
@@ -144,6 +145,12 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 			}
 			row[col.Name] = v
 			continue
+		}
+		if r.Infer {
+			if v, ok := r.gen.Guess(col); ok {
+				row[col.Name] = v
+				continue
+			}
 		}
 		v, err := r.gen.Default(col)
 		if err != nil {

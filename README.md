@@ -102,6 +102,15 @@ gofakeit function. Templates can be combined (`{{ FirstName }}-{{ Index }}`). Th
 rendered string is converted to the column's type, so use a numeric template
 (`{{ Number ... }}`) for numeric columns.
 
+### Inferring from column names (`--infer`)
+
+With `--infer`, any unset STRING/BYTES column whose name matches a gofakeit
+function is filled with that function automatically: `Email` → emails,
+`FirstName` → first names, and likewise `Phone`, `Company`, `City`, `Country`, …
+Names are matched case-insensitively, ignoring underscores (`first_name` matches
+`FirstName`). Explicit `--set` always wins, primary keys keep their unique
+values, and unmatched columns fall back to the type default.
+
 ## Config file
 
 For anything non-trivial, use a YAML file (`--config hopper.yaml`) — a flat list of
@@ -130,6 +139,7 @@ tables:
     --set             column template as TABLE.COLUMN=TEMPLATE (repeatable)
     --seed int        random seed (0 = time-based)
     --dry-run         generate rows but do not insert
+    --infer           guess a gofakeit function from each unset column's name
 ```
 
 ## Development

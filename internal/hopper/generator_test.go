@@ -98,6 +98,29 @@ func TestGeneratorPatternFunctions(t *testing.T) {
 	}
 }
 
+func TestGeneratorGuess(t *testing.T) {
+	g := newTestGen()
+	strCol := func(name string) *Column {
+		return &Column{Name: name, Type: ColumnType{Base: ast.StringTypeName}}
+	}
+
+	for _, name := range []string{"FirstName", "Email", "first_name"} {
+		if v, ok := g.Guess(strCol(name)); !ok || v.(string) == "" {
+			t.Errorf("Guess(%q) = %v, %v; want a value", name, v, ok)
+		}
+	}
+
+	if _, ok := g.Guess(strCol("AlbumTitle")); ok {
+		t.Error("Guess(AlbumTitle) should miss (no such gofakeit func)")
+	}
+	if _, ok := g.Guess(strCol("Number")); ok {
+		t.Error("Guess(Number) should miss (param-required func)")
+	}
+	if _, ok := g.Guess(&Column{Name: "Email", Type: ColumnType{Base: ast.Int64TypeName}}); ok {
+		t.Error("Guess on a non-string column should miss")
+	}
+}
+
 func typeName(v any) string {
 	switch v.(type) {
 	case int64:

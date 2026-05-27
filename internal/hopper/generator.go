@@ -168,6 +168,35 @@ func (g *Generator) coerce(col *Column, s string) (any, error) {
 	}
 }
 
+func (g *Generator) Guess(col *Column) (any, bool) {
+	if col.Type.IsArray {
+		return nil, false
+	}
+	if col.Type.Base != ast.StringTypeName && col.Type.Base != ast.BytesTypeName {
+		return nil, false
+	}
+	info := gofakeit.GetFuncLookup(normalizeColumnName(col.Name))
+	if info == nil || len(info.Params) > 0 {
+		return nil, false
+	}
+	v, err := info.Generate(g.faker, &gofakeit.MapParams{}, info)
+	if err != nil {
+		return nil, false
+	}
+	s, ok := v.(string)
+	if !ok {
+		return nil, false
+	}
+	if col.Type.Base == ast.BytesTypeName {
+		return []byte(s), true
+	}
+	return s, true
+}
+
+func normalizeColumnName(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, "_", ""))
+}
+
 func stringLen(size int64) int {
 	if size > 0 && size < defaultStringLen {
 		return int(size)
