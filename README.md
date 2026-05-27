@@ -11,17 +11,11 @@
 
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
 
-Named after [Minecraft's hopper](https://minecraft.wiki/w/Hopper) — the block that
-funnels whatever drops in down into the container below. This one funnels dummy rows
-into Spanner.
-
 It reads the schema directly from the target database, fills every column with a
 type-appropriate random value by default, and lets you override individual
 columns with [gofakeit](https://github.com/brianvoe/gofakeit) templates.
 Interleaved tables are handled automatically: child rows are distributed across
 their parents and inherit the parent's primary key.
-
-It is a companion to [hammer](https://github.com/daichirata/hammer) (schema management for Spanner).
 
 The examples below use the [Spanner sample schema](https://cloud.google.com/spanner/docs/schema-and-data-model) (`Singers` → `Albums` → `Songs`, interleaved).
 
