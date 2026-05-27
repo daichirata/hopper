@@ -131,6 +131,11 @@ matched case-insensitively, ignoring underscores (`first_name` matches
 values, and anything unmatched — or whose value would not fit the column's
 declared size — falls back to the type default. Pass `--no-infer` to disable it.
 
+### NULL values
+
+`--null-rate` (0–1) randomly leaves nullable, unset columns NULL. Primary keys,
+inherited / FK columns and explicit `--set` values are never nulled.
+
 ## Config file
 
 For anything non-trivial, use a YAML file (`--config hopper.yaml`) — a flat list of
@@ -158,8 +163,10 @@ tables:
     --table           rows to generate as TABLE=N            (repeatable)
     --set             column template as TABLE.COLUMN=TEMPLATE (repeatable)
     --seed int        random seed (0 = time-based)
-    --dry-run         generate rows but do not insert
+    --dry-run         generate rows but do not insert (prints a few sample rows)
     --no-infer        disable inferring a gofakeit function from column names
+    --truncate        delete existing rows from each target table before loading
+    --null-rate float probability (0-1) of leaving a nullable, unset column NULL
 ```
 
 ## Development

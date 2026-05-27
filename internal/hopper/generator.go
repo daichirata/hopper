@@ -183,6 +183,10 @@ func (g *Generator) coerce(col *Column, s string) (any, error) {
 	}
 }
 
+func (g *Generator) Float() float64 {
+	return g.faker.Float64()
+}
+
 func (g *Generator) Intn(n int) int {
 	if n <= 0 {
 		return 0

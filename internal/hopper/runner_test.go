@@ -238,3 +238,37 @@ func TestRunnerThreeLevelAutoComplete(t *testing.T) {
 		t.Errorf("Songs rows = %d, want 24", got)
 	}
 }
+
+func TestRunnerNullRate(t *testing.T) {
+	r := newDryRunner(t)
+	r.NullRate = 1.0
+	cfg, _ := ConfigFromFlags([]string{"Singers=10"}, nil)
+
+	m := genTables(t, r, cfg)
+	for _, row := range m["Singers"].generated {
+		if row["FirstName"] != nil {
+			t.Errorf("FirstName = %v, want NULL with null-rate 1.0", row["FirstName"])
+		}
+		if row["SingerId"] == nil {
+			t.Error("SingerId (primary key) must never be NULL")
+		}
+	}
+}
+
+func TestRunnerDryRunSample(t *testing.T) {
+	r := newDryRunner(t)
+	r.DryRun = true
+	cfg, _ := ConfigFromFlags([]string{"Singers=10"}, nil)
+
+	results, err := r.Run(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, res := range results {
+		if res.Table == "Singers" {
+			if len(res.Sample) != 3 {
+				t.Errorf("Singers sample = %d rows, want 3", len(res.Sample))
+			}
+		}
+	}
+}

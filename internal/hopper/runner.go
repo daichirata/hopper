@@ -12,17 +12,22 @@ const maxCellsPerCommit = 20000
 
 const maxRowsPerCommit = 1000
 
+const sampleRows = 3
+
 type Result struct {
-	Table string
-	Rows  int
+	Table  string
+	Rows   int
+	Sample []map[string]any
 }
 
 type Runner struct {
-	schema *Schema
-	gen    *Generator
-	client *Client
-	DryRun bool
-	Infer  bool
+	schema   *Schema
+	gen      *Generator
+	client   *Client
+	DryRun   bool
+	Infer    bool
+	Truncate bool
+	NullRate float64
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
@@ -52,16 +57,37 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 	if err := r.generate(order); err != nil {
 		return nil, err
 	}
+
+	live := !r.DryRun && r.client != nil
+	if live && r.Truncate {
+		for i := len(order) - 1; i >= 0; i-- {
+			if err := r.client.Truncate(ctx, order[i].table.Name); err != nil {
+				return nil, fmt.Errorf("truncate %s: %w", order[i].table.Name, err)
+			}
+		}
+	}
+
 	results := make([]Result, 0, len(order))
 	for _, gt := range order {
-		if !r.DryRun && r.client != nil {
+		if live {
 			if err := r.insertTable(ctx, gt); err != nil {
 				return nil, err
 			}
 		}
-		results = append(results, Result{Table: gt.table.Name, Rows: len(gt.generated)})
+		res := Result{Table: gt.table.Name, Rows: len(gt.generated)}
+		if r.DryRun {
+			res.Sample = sample(gt.generated, sampleRows)
+		}
+		results = append(results, res)
 	}
 	return results, nil
+}
+
+func sample(rows []map[string]any, n int) []map[string]any {
+	if len(rows) < n {
+		n = len(rows)
+	}
+	return rows[:n]
 }
 
 func (r *Runner) plan(config *Config) ([]*genTable, error) {
@@ -196,6 +222,10 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 				return nil, err
 			}
 			row[col.Name] = v
+			continue
+		}
+		if !col.NotNull && r.NullRate > 0 && r.gen.Float() < r.NullRate {
+			row[col.Name] = nil
 			continue
 		}
 		if r.Infer {

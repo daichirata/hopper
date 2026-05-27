@@ -76,3 +76,8 @@ func (c *Client) Apply(ctx context.Context, ms []*spanner.Mutation) error {
 	_, err := c.client.Apply(ctx, ms)
 	return err
 }
+
+func (c *Client) Truncate(ctx context.Context, table string) error {
+	_, err := c.client.PartitionedUpdate(ctx, spanner.Statement{SQL: "DELETE FROM `" + table + "` WHERE true"})
+	return err
+}
