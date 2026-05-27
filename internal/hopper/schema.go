@@ -114,36 +114,33 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 		s.byName[t.Name] = t
 	}
 	for _, stmt := range stmts {
-		at, ok := stmt.(*ast.AlterTable)
-		if !ok {
-			continue
-		}
-		add, ok := at.TableAlteration.(*ast.AddTableConstraint)
-		if !ok {
-			continue
-		}
-		fk, ok := add.TableConstraint.Constraint.(*ast.ForeignKey)
-		if !ok {
-			continue
-		}
-		if t, ok := s.byName[pathName(at.Name)]; ok {
-			t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk))
-		}
-	}
-	for _, stmt := range stmts {
-		ci, ok := stmt.(*ast.CreateIndex)
-		if !ok || !ci.Unique {
-			continue
-		}
-		t, ok := s.byName[pathName(ci.TableName)]
-		if !ok {
-			continue
-		}
-		if t.uniqueColumns == nil {
-			t.uniqueColumns = map[string]bool{}
-		}
-		for _, k := range ci.Keys {
-			t.uniqueColumns[k.Name.Name] = true
+		switch v := stmt.(type) {
+		case *ast.AlterTable:
+			add, ok := v.TableAlteration.(*ast.AddTableConstraint)
+			if !ok {
+				continue
+			}
+			fk, ok := add.TableConstraint.Constraint.(*ast.ForeignKey)
+			if !ok {
+				continue
+			}
+			if t, ok := s.byName[pathName(v.Name)]; ok {
+				t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk))
+			}
+		case *ast.CreateIndex:
+			if !v.Unique {
+				continue
+			}
+			t, ok := s.byName[pathName(v.TableName)]
+			if !ok {
+				continue
+			}
+			if t.uniqueColumns == nil {
+				t.uniqueColumns = map[string]bool{}
+			}
+			for _, k := range v.Keys {
+				t.uniqueColumns[k.Name.Name] = true
+			}
 		}
 	}
 	return s, nil
@@ -169,11 +166,7 @@ func pathName(p *ast.Path) string {
 	if p == nil || len(p.Idents) == 0 {
 		return ""
 	}
-	names := make([]string, len(p.Idents))
-	for i, id := range p.Idents {
-		names[i] = id.Name
-	}
-	return strings.Join(names, ".")
+	return strings.Join(identNames(p.Idents), ".")
 }
 
 func schemaType(t ast.SchemaType) ColumnType {

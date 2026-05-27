@@ -50,14 +50,7 @@ func ConfigFromYAML(data []byte) (*Config, error) {
 	}
 	c := &Config{}
 	for name, yt := range yc.Tables {
-		ts := &TableSpec{Name: name, Rows: yt.Rows}
-		if len(yt.Columns) > 0 {
-			ts.Columns = make(map[string]string, len(yt.Columns))
-			for col, pattern := range yt.Columns {
-				ts.Columns[col] = pattern
-			}
-		}
-		c.Tables = append(c.Tables, ts)
+		c.Tables = append(c.Tables, &TableSpec{Name: name, Rows: yt.Rows, Columns: yt.Columns})
 	}
 	c.Normalize()
 	return c, nil

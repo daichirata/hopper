@@ -24,28 +24,30 @@ func NewGenerator(seed uint64) *Generator {
 	return &Generator{faker: gofakeit.New(seed)}
 }
 
+var templateFuncs = template.FuncMap{
+	"add": func(a, b int) int { return a + b },
+	"sub": func(a, b int) int { return a - b },
+	"mul": func(a, b int) int { return a * b },
+	"div": func(a, b int) int {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	},
+	"mod": func(a, b int) int {
+		if b == 0 {
+			return 0
+		}
+		return a % b
+	},
+}
+
 func (g *Generator) Pattern(col *Column, pattern string, index int) (any, error) {
-	opts := &gofakeit.TemplateOptions{
-		Funcs: template.FuncMap{
-			"Index": func() int { return index },
-			"add":   func(a, b int) int { return a + b },
-			"sub":   func(a, b int) int { return a - b },
-			"mul":   func(a, b int) int { return a * b },
-			"div": func(a, b int) int {
-				if b == 0 {
-					return 0
-				}
-				return a / b
-			},
-			"mod": func(a, b int) int {
-				if b == 0 {
-					return 0
-				}
-				return a % b
-			},
-		},
+	funcs := template.FuncMap{"Index": func() int { return index }}
+	for name, fn := range templateFuncs {
+		funcs[name] = fn
 	}
-	s, err := g.faker.Template(pattern, opts)
+	s, err := g.faker.Template(pattern, &gofakeit.TemplateOptions{Funcs: funcs})
 	if err != nil {
 		return nil, fmt.Errorf("column %s: %w", col.Name, err)
 	}
@@ -126,38 +128,15 @@ func (g *Generator) scalar(base ast.ScalarTypeName, size int64) (any, error) {
 
 func (g *Generator) defaultArray(col *Column) (any, error) {
 	n := 1 + g.faker.IntN(3)
-	switch col.Type.Base {
-	case ast.StringTypeName:
-		out := make([]string, n)
-		for i := range out {
-			out[i] = g.faker.LetterN(uint(stringLen(col.Type.Size)))
-		}
-		return out, nil
-	case ast.Int64TypeName:
-		out := make([]int64, n)
-		for i := range out {
-			out[i] = g.faker.Int64()
-		}
-		return out, nil
-	case ast.Float64TypeName:
-		out := make([]float64, n)
-		for i := range out {
-			out[i] = g.faker.Float64()
-		}
-		return out, nil
-	case ast.BoolTypeName:
-		out := make([]bool, n)
-		for i := range out {
-			out[i] = g.faker.Bool()
-		}
-		return out, nil
-	default:
+	vals := make([]any, n)
+	for i := range vals {
 		v, err := g.scalar(col.Type.Base, col.Type.Size)
 		if err != nil {
 			return nil, err
 		}
-		return []any{v}, nil
+		vals[i] = v
 	}
+	return toSlice(col.Type.Base, vals), nil
 }
 
 func (g *Generator) coerce(col *Column, s string) (any, error) {
@@ -166,7 +145,7 @@ func (g *Generator) coerce(col *Column, s string) (any, error) {
 		return nil, err
 	}
 	if col.Type.IsArray {
-		return singletonArray(col.Type.Base, v), nil
+		return toSlice(col.Type.Base, []any{v}), nil
 	}
 	return v, nil
 }
@@ -199,22 +178,46 @@ func coerceScalar(base ast.ScalarTypeName, s string) (any, error) {
 	}
 }
 
-func singletonArray(base ast.ScalarTypeName, v any) any {
+func toSlice(base ast.ScalarTypeName, vals []any) any {
 	switch base {
 	case ast.StringTypeName:
-		return []string{v.(string)}
+		out := make([]string, len(vals))
+		for i, v := range vals {
+			out[i] = v.(string)
+		}
+		return out
 	case ast.BytesTypeName:
-		return [][]byte{v.([]byte)}
+		out := make([][]byte, len(vals))
+		for i, v := range vals {
+			out[i] = v.([]byte)
+		}
+		return out
 	case ast.Int64TypeName:
-		return []int64{v.(int64)}
+		out := make([]int64, len(vals))
+		for i, v := range vals {
+			out[i] = v.(int64)
+		}
+		return out
 	case ast.Float64TypeName:
-		return []float64{v.(float64)}
+		out := make([]float64, len(vals))
+		for i, v := range vals {
+			out[i] = v.(float64)
+		}
+		return out
 	case ast.Float32TypeName:
-		return []float32{v.(float32)}
+		out := make([]float32, len(vals))
+		for i, v := range vals {
+			out[i] = v.(float32)
+		}
+		return out
 	case ast.BoolTypeName:
-		return []bool{v.(bool)}
+		out := make([]bool, len(vals))
+		for i, v := range vals {
+			out[i] = v.(bool)
+		}
+		return out
 	default:
-		return []any{v}
+		return vals
 	}
 }
 
