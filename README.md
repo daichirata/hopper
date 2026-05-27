@@ -60,16 +60,25 @@ docker run --rm -v /path/to/key.json:/key.json \
   --table 'Singers=1000'
 ```
 
-Against a local emulator, put both containers on one network:
+Against a local emulator, a small `compose.yaml` keeps the wiring simple:
+
+```yaml
+services:
+  spanner:
+    image: gcr.io/cloud-spanner-emulator/emulator
+    ports: ["9010:9010", "9020:9020"]
+  hopper:
+    image: ghcr.io/daichirata/hopper
+    depends_on: [spanner]
+    environment:
+      SPANNER_EMULATOR_HOST: spanner:9010
+    command: ["run", "spanner://projects/p/instances/i/databases/d", "--table", "Singers=1000"]
+```
 
 ```
-docker network create hopper-net
-docker run -d --name spanner --network hopper-net gcr.io/cloud-spanner-emulator/emulator
-
-# create the instance/database/schema in the emulator first (e.g. with gcloud or hammer), then:
-docker run --rm --network hopper-net -e SPANNER_EMULATOR_HOST=spanner:9010 \
-  ghcr.io/daichirata/hopper run \
-  spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
+docker compose up -d spanner
+# create the instance/database/schema in the emulator (e.g. with gcloud or hammer), then:
+docker compose run --rm hopper
 ```
 
 ## Specifying tables and counts
