@@ -1,16 +1,5 @@
 # hopper
 
-```
-        ▓ dummy rows ▓
-        ╔════════════╗
-        ║            ║
-        ╚═══╗    ╔═══╝
-            ╚╗  ╔╝
-             ╚══╝
-              ▼▼
-         Cloud Spanner
-```
-
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
 
 It reads the schema directly from the target database, fills every column with a
