@@ -47,6 +47,17 @@ spanner://projects/{projectId}/instances/{instanceId}/databases/{databaseName}?c
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `hopper run DATABASE`      | generate dummy data and load it into Spanner |
+| `hopper scaffold DATABASE` | print a starter config (YAML) from the schema |
+| `hopper version`           | print the version |
+
+The rest of this README covers `run`, the main command. Run `hopper <command> --help`
+for the full set of flags.
+
 ## Tables and row counts
 
 `--table TABLE=N` (repeatable) sets the **total** number of rows for a table:
