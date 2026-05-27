@@ -1,5 +1,9 @@
 # hopper
 
+[![Test](https://github.com/daichirata/hopper/actions/workflows/test.yaml/badge.svg)](https://github.com/daichirata/hopper/actions/workflows/test.yaml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/daichirata/hopper.svg)](https://pkg.go.dev/github.com/daichirata/hopper)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
 
 It reads the schema directly from the target database, fills every column with a
