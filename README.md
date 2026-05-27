@@ -40,11 +40,18 @@ docker run --rm ghcr.io/daichirata/hopper run --help
 hopper run spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
 ```
 
-The database is addressed by a `spanner://` URI, the same form hammer uses:
+The database is given as a `spanner://` DSN:
 
 ```
-spanner://projects/PROJECT/instances/INSTANCE/databases/DATABASE[?credentials=/path/to/key.json]
+spanner://projects/{projectId}/instances/{instanceId}/databases/{databaseName}?credentials=/path/to/keyfile.json
 ```
+
+| Param          | Required | Description                                                                  |
+|----------------|----------|------------------------------------------------------------------------------|
+| `projectId`    | true     | The Google Cloud Platform project id                                         |
+| `instanceId`   | true     | The id of the instance running Spanner                                       |
+| `databaseName` | true     | The name of the Spanner database                                             |
+| `credentials`  | false    | The path to the keyfile. If not present, the client uses your default application credentials. |
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
 
