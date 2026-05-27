@@ -4,7 +4,6 @@ package hopper
 
 import (
 	"context"
-	"math/rand"
 	"os"
 	"strings"
 	"testing"
@@ -87,7 +86,7 @@ func TestE2EEmulator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseSchema: %v", err)
 	}
-	gen := NewGenerator(rand.New(rand.NewSource(1)))
+	gen := NewGenerator(1)
 	runner := NewRunner(schema, gen, hc)
 
 	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30"}, nil)

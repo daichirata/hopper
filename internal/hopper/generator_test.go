@@ -1,31 +1,42 @@
 package hopper
 
 import (
-	"math/rand"
 	"testing"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
 
 func newTestGen() *Generator {
-	return NewGenerator(rand.New(rand.NewSource(1)))
+	return NewGenerator(1)
 }
 
-func TestGeneratorRange(t *testing.T) {
+func TestGeneratorPatternNumber(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "MarketingBudget", Type: ColumnType{Base: ast.Int64TypeName}}
-	for i := 0; i < 200; i++ {
-		v, err := g.FromRule(col, ColumnRule{Range: &RangeRule{Min: 0, Max: 10}}, i)
+	for i := 0; i < 100; i++ {
+		v, err := g.Pattern(col, "{{ Number 0 10 }}", i)
 		if err != nil {
-			t.Fatalf("FromRule: %v", err)
+			t.Fatalf("Pattern: %v", err)
 		}
 		n, ok := v.(int64)
 		if !ok {
-			t.Fatalf("range value type = %T, want int64", v)
+			t.Fatalf("value type = %T, want int64", v)
 		}
 		if n < 0 || n > 10 {
-			t.Fatalf("range value %d out of [0,10]", n)
+			t.Fatalf("value %d out of [0,10]", n)
 		}
+	}
+}
+
+func TestGeneratorPatternIndex(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Name", Type: ColumnType{Base: ast.StringTypeName}}
+	v, err := g.Pattern(col, "user-{{ Index }}", 7)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if v.(string) != "user-7" {
+		t.Errorf("Pattern = %q, want user-7", v)
 	}
 }
 
@@ -65,6 +76,24 @@ func TestGeneratorDefaultTypes(t *testing.T) {
 		}
 		if got := typeName(v); got != c.want {
 			t.Errorf("Default(%s) type = %s, want %s", c.base, got, c.want)
+		}
+	}
+}
+
+func TestGeneratorPatternFunctions(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "c", Type: ColumnType{Base: ast.StringTypeName}}
+	patterns := []string{
+		`{{ Regex "[A-Z]{5}" }}`,
+		`{{ RandomString (SliceString "free" "pro" "ent") }}`,
+		`{{ FirstName }}`,
+		`{{ UUID }}`,
+		`{{ LetterN 8 }}`,
+		`{{ FirstName }}-{{ Index }}`,
+	}
+	for _, p := range patterns {
+		if _, err := g.Pattern(col, p, 0); err != nil {
+			t.Errorf("Pattern(%q): %v", p, err)
 		}
 	}
 }

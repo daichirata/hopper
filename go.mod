@@ -1,12 +1,12 @@
 module github.com/daichirata/hopper
 
-go 1.24.0
+go 1.26.0
 
 require (
 	cloud.google.com/go v0.113.0
 	cloud.google.com/go/spanner v1.62.0
+	github.com/brianvoe/gofakeit/v7 v7.15.0
 	github.com/cloudspannerecosystem/memefish v0.6.3-0.20250912143235-4776405ac3b0
-	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/api v0.180.0
 	gopkg.in/yaml.v3 v3.0.1

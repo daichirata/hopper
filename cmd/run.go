@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
@@ -59,7 +58,7 @@ var (
 			if seed == 0 {
 				seed = time.Now().UnixNano()
 			}
-			gen := hopper.NewGenerator(rand.New(rand.NewSource(seed)))
+			gen := hopper.NewGenerator(uint64(seed))
 
 			runner := hopper.NewRunner(schema, gen, client)
 			runner.DryRun = dryRun
@@ -94,7 +93,7 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 func init() {
 	runCmd.Flags().StringP("config", "c", "", "path to a YAML config file")
 	runCmd.Flags().StringArray("table", nil, "rows to generate as TABLE=N (repeatable); child rows are distributed across parents")
-	runCmd.Flags().StringArray("set", nil, "column rule as TABLE.COLUMN=RULE (repeatable); RULE is template:<tmpl> or range:<min>-<max>")
+	runCmd.Flags().StringArray("set", nil, "column template as TABLE.COLUMN=TEMPLATE (repeatable); gofakeit template, e.g. '{{ Number 0 100 }}' or '{{ FirstName }}-{{ Index }}'")
 	runCmd.Flags().Int64("seed", 0, "random seed (0 = time-based)")
 	runCmd.Flags().Bool("dry-run", false, "generate rows but do not insert")
 

@@ -30,7 +30,7 @@ func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
 
 type genTable struct {
 	table     *Table
-	columns   map[string]ColumnRule
+	columns   map[string]string
 	total     int
 	parent    *genTable
 	generated []map[string]any
@@ -129,8 +129,8 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 				continue
 			}
 		}
-		if rule, ok := gt.columns[col.Name]; ok {
-			v, err := r.gen.FromRule(col, rule, index)
+		if pattern, ok := gt.columns[col.Name]; ok {
+			v, err := r.gen.Pattern(col, pattern, index)
 			if err != nil {
 				return nil, err
 			}

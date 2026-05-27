@@ -2,7 +2,6 @@ package hopper
 
 import (
 	"context"
-	"math/rand"
 	"testing"
 )
 
@@ -12,8 +11,7 @@ func newDryRunner(t *testing.T) *Runner {
 	if err != nil {
 		t.Fatalf("ParseSchema: %v", err)
 	}
-	gen := NewGenerator(rand.New(rand.NewSource(1)))
-	return NewRunner(schema, gen, nil)
+	return NewRunner(schema, NewGenerator(1), nil)
 }
 
 func genTables(t *testing.T, r *Runner, cfg *Config) map[string]*genTable {
@@ -84,11 +82,11 @@ func TestRunnerRoundRobinDistribution(t *testing.T) {
 	}
 }
 
-func TestRunnerColumnRulesAndUniquePK(t *testing.T) {
+func TestRunnerColumnTemplateAndUniquePK(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, err := ConfigFromFlags(
 		[]string{"Albums=50"},
-		[]string{"Albums.MarketingBudget=range:0-3"},
+		[]string{"Albums.MarketingBudget={{ Number 0 3 }}"},
 	)
 	if err != nil {
 		t.Fatalf("ConfigFromFlags: %v", err)

@@ -4,8 +4,9 @@
 
 It reads the schema directly from the target database, fills every column with a
 type-appropriate random value by default, and lets you override individual
-columns with simple rules. Interleaved tables are handled automatically: child
-rows are distributed across their parents and inherit the parent's primary key.
+columns with [gofakeit](https://github.com/brianvoe/gofakeit) templates.
+Interleaved tables are handled automatically: child rows are distributed across
+their parents and inherit the parent's primary key.
 
 It is a companion to [hammer](https://github.com/daichirata/hammer) (schema management for Spanner).
 
@@ -61,41 +62,63 @@ hopper run spanner://... --table 'Albums=300'
 # -> creates 1 Singers row and 300 Albums interleaved under it
 ```
 
-## Column rules
+## Column values
 
 By default every column gets a type-appropriate random value, and primary key
 columns get a collision-free unique value (UUID for STRING, sequential for
-INT64, and so on). Override a column with `--set TABLE.COLUMN=RULE`:
+INT64, and so on). Generated/stored columns are skipped automatically.
+
+Override a column with `--set TABLE.COLUMN=TEMPLATE`, where TEMPLATE is a
+[gofakeit](https://github.com/brianvoe/gofakeit#templates) template using `{{ }}`:
 
 ```
---set 'Albums.MarketingBudget=range:0-1000000'              # random integer in [0, 1000000]
---set 'Singers.FirstName=template:{ .Random }-{ .Index }'   # text/template with { } delimiters
+--set 'Albums.MarketingBudget={{ Number 0 1000000 }}'
+--set 'Singers.FirstName={{ FirstName }}'
+--set 'Singers.LastName={{ FirstName }}-{{ Index }}'
 ```
 
-Templates expose:
+`TABLE` is matched by name, so the leaf table name is enough (`Albums.MarketingBudget`),
+whether or not the table is interleaved.
 
-| Variable      | Meaning                              |
-|---------------|--------------------------------------|
-| `{ .Index }`  | row sequence number (0-based)        |
-| `{ .Random }` | a fresh random token per reference   |
+### Template building blocks
 
-Per-column rule precedence: `template` > `range` > primary-key auto-numbering > type default.
+Any [gofakeit function](https://github.com/brianvoe/gofakeit#functions) works inside
+`{{ }}`. Common ones:
+
+| Template                                     | Result                                |
+|----------------------------------------------|---------------------------------------|
+| `{{ Number 0 100 }}`                         | random integer in a range             |
+| `{{ Float64 }}`                              | random float                          |
+| `{{ LetterN 12 }}`                           | 12 random letters                     |
+| `{{ Regex "[A-Z0-9]{8}" }}`                  | string matching a regex               |
+| `{{ UUID }}`                                 | a UUID                                |
+| `{{ RandomString (SliceString "a" "b" "c") }}` | pick one of the given values        |
+| `{{ FirstName }}` `{{ Email }}` `{{ Phone }}` `{{ Company }}` | realistic fake data |
+| `{{ Sentence 5 }}`                           | a 5-word sentence                     |
+| `{{ Index }}`                                | row sequence number (0-based)         |
+
+`{{ Index }}` is added by hopper (the current row index); everything else is a
+gofakeit function. Templates can be combined (`{{ FirstName }}-{{ Index }}`). The
+rendered string is converted to the column's type, so use a numeric template
+(`{{ Number ... }}`) for numeric columns.
 
 ## Config file
 
-For anything non-trivial, use a YAML file (`--config hopper.yaml`). It maps 1:1
-to the CLI model — a flat list of tables with row counts and column rules:
+For anything non-trivial, use a YAML file (`--config hopper.yaml`) — a flat list of
+tables with row counts and column templates:
 
 ```yaml
 tables:
   Singers:
     rows: 10
     columns:
-      FirstName: { template: "{ .Random }-{ .Index }" }
+      FirstName: "{{ FirstName }}"
+      LastName: "{{ LastName }}"
   Albums:
     rows: 1000
     columns:
-      MarketingBudget: { range: [0, 1000000] }
+      AlbumTitle: "{{ Sentence 3 }}"
+      MarketingBudget: "{{ Number 0 1000000 }}"
     # SingerId and other parent keys are inherited automatically.
 ```
 
@@ -103,8 +126,8 @@ tables:
 
 ```
 -c, --config string   path to a YAML config file
-    --table           rows to generate as TABLE=N      (repeatable)
-    --set             column rule as TABLE.COLUMN=RULE  (repeatable)
+    --table           rows to generate as TABLE=N            (repeatable)
+    --set             column template as TABLE.COLUMN=TEMPLATE (repeatable)
     --seed int        random seed (0 = time-based)
     --dry-run         generate rows but do not insert
 ```
