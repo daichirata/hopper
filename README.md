@@ -5,8 +5,7 @@
 It reads the schema directly from the target database, fills every column with a
 type-appropriate random value by default, and lets you override individual
 columns with simple rules. Interleaved tables are handled automatically: child
-rows inherit their parent's primary key, and you can control how many child rows
-to generate per parent.
+rows are distributed across their parents and inherit the parent's primary key.
 
 It is a companion to [hammer](https://github.com/daichirata/hammer) (schema management for Spanner).
 
@@ -35,24 +34,21 @@ When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credential
 
 ## Specifying tables and counts
 
-Tables are given with `--table PATH=N` (repeatable). The dotted path expresses
-the interleave hierarchy:
+Each `--table TABLE=N` (repeatable) sets the **total** number of rows for a table:
 
 ```
---table 'Singers=1000'                  # root: 1000 rows in total
---table 'Singers.Albums=100'            # child: 100 rows per parent Singer
---table 'Singers.Albums.Songs=5'        # grandchild: 5 rows per parent Album
+--table 'Singers=10'
+--table 'Albums=1000'
 ```
 
-- A path with **no dot** sets the **total** number of rows.
-- A path **with dots** sets the number of rows **per parent**.
-
-When both a parent and a child are given as totals (no dots), the child rows are
-distributed across the parent rows round-robin:
+Parent/child relationships come from the schema's `INTERLEAVE` clauses. Child rows
+are distributed across their parents round-robin and inherit the parent's primary
+key, so the two flags above produce 1000 Albums spread over 10 Singers (~100 each).
+To control "rows per parent", choose the totals accordingly:
 
 ```
---table 'Singers=300' --table 'Albums=300'   # 300 Albums spread across 300 Singers (1 each)
---table 'Singers=10'  --table 'Albums=300'   # 300 Albums spread across 10 Singers (~30 each)
+--table 'Singers=10' --table 'Albums=1000'   # ~100 Albums per Singer
+--table 'Singers=10' --table 'Albums=300'    # ~30 Albums per Singer
 ```
 
 ### Auto-completing parents
@@ -69,10 +65,10 @@ hopper run spanner://... --table 'Albums=300'
 
 By default every column gets a type-appropriate random value, and primary key
 columns get a collision-free unique value (UUID for STRING, sequential for
-INT64, and so on). Override a column with `--set PATH.Column=RULE`:
+INT64, and so on). Override a column with `--set TABLE.COLUMN=RULE`:
 
 ```
---set 'Singers.Albums.MarketingBudget=range:0-1000000'      # random integer in [0, 1000000]
+--set 'Albums.MarketingBudget=range:0-1000000'              # random integer in [0, 1000000]
 --set 'Singers.FirstName=template:{ .Random }-{ .Index }'   # text/template with { } delimiters
 ```
 
@@ -88,28 +84,27 @@ Per-column rule precedence: `template` > `range` > primary-key auto-numbering > 
 ## Config file
 
 For anything non-trivial, use a YAML file (`--config hopper.yaml`). It maps 1:1
-to the CLI model:
+to the CLI model — a flat list of tables with row counts and column rules:
 
 ```yaml
 tables:
   Singers:
-    rows: 1000
+    rows: 10
     columns:
       FirstName: { template: "{ .Random }-{ .Index }" }
-    children:
-      Albums:
-        rows_per_parent: 100
-        columns:
-          MarketingBudget: { range: [0, 1000000] }
-        # SingerId and other parent keys are inherited automatically.
+  Albums:
+    rows: 1000
+    columns:
+      MarketingBudget: { range: [0, 1000000] }
+    # SingerId and other parent keys are inherited automatically.
 ```
 
 ## Flags
 
 ```
--c, --config string   path to YAML config file
-    --table           table rows as PATH=N            (repeatable)
-    --set             column rule as PATH.Column=RULE (repeatable)
+-c, --config string   path to a YAML config file
+    --table           rows to generate as TABLE=N      (repeatable)
+    --set             column rule as TABLE.COLUMN=RULE  (repeatable)
     --seed int        random seed (0 = time-based)
     --dry-run         generate rows but do not insert
 ```

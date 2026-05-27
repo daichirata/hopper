@@ -12,11 +12,10 @@ tables:
     rows: 10
     columns:
       FirstName: { template: "{ .Random }-{ .Index }" }
-    children:
-      Albums:
-        rows_per_parent: 5
-        columns:
-          MarketingBudget: { range: [0, 10] }
+  Albums:
+    rows: 1000
+    columns:
+      MarketingBudget: { range: [0, 10] }
 `)
 
 	fromYAML, err := ConfigFromYAML(yamlSrc)
@@ -25,8 +24,8 @@ tables:
 	}
 
 	fromFlags, err := ConfigFromFlags(
-		[]string{"Singers=10", "Singers.Albums=5"},
-		[]string{"Singers.FirstName=template:{ .Random }-{ .Index }", "Singers.Albums.MarketingBudget=range:0-10"},
+		[]string{"Singers=10", "Albums=1000"},
+		[]string{"Singers.FirstName=template:{ .Random }-{ .Index }", "Albums.MarketingBudget=range:0-10"},
 	)
 	if err != nil {
 		t.Fatalf("ConfigFromFlags: %v", err)
@@ -39,23 +38,30 @@ tables:
 
 func dumpConfig(c *Config) string {
 	var b []byte
-	var walk func(specs []*TableSpec, depth string)
-	walk = func(specs []*TableSpec, depth string) {
-		for _, s := range specs {
-			b = append(b, []byte(depth+s.Name)...)
-			b = append(b, '{')
-			for k, v := range s.Columns {
-				b = append(b, []byte(k+":"+v.Template)...)
-				if v.Range != nil {
-					b = append(b, []byte("range")...)
-				}
+	for _, s := range c.Tables {
+		b = append(b, []byte(s.Name)...)
+		b = append(b, '{')
+		for k, v := range s.Columns {
+			b = append(b, []byte(k+":"+v.Template)...)
+			if v.Range != nil {
+				b = append(b, []byte("range")...)
 			}
-			b = append(b, '}')
-			walk(s.Children, depth+"  ")
+		}
+		b = append(b, '}')
+	}
+	return string(b)
+}
+
+func TestParseSetFlagUsesLeafTableName(t *testing.T) {
+	for _, key := range []string{"Albums.MarketingBudget", "Singers.Albums.MarketingBudget"} {
+		table, col, _, err := parseSetFlag(key + "=range:0-3")
+		if err != nil {
+			t.Fatalf("parseSetFlag(%q): %v", key, err)
+		}
+		if table != "Albums" || col != "MarketingBudget" {
+			t.Errorf("parseSetFlag(%q) = (%q, %q), want (Albums, MarketingBudget)", key, table, col)
 		}
 	}
-	walk(c.Tables, "")
-	return string(b)
 }
 
 func TestParseRange(t *testing.T) {

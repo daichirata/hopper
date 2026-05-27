@@ -40,46 +40,46 @@ func TestRunnerAncestorCompletion(t *testing.T) {
 	}
 
 	m := genTables(t, r, cfg)
-	if got := len(m["Singers"].rows); got != 1 {
+	if got := len(m["Singers"].generated); got != 1 {
 		t.Errorf("Singers rows = %d, want 1 (auto-completed parent)", got)
 	}
-	if got := len(m["Albums"].rows); got != 300 {
+	if got := len(m["Albums"].generated); got != 300 {
 		t.Errorf("Albums rows = %d, want 300", got)
 	}
 
-	parentSID := m["Singers"].rows[0]["SingerId"]
-	for i, row := range m["Albums"].rows {
+	parentSID := m["Singers"].generated[0]["SingerId"]
+	for i, row := range m["Albums"].generated {
 		if row["SingerId"] != parentSID {
 			t.Fatalf("row %d SingerId = %v, want inherited %v", i, row["SingerId"], parentSID)
 		}
 	}
 }
 
-func TestRunnerPerParentInheritance(t *testing.T) {
+func TestRunnerRoundRobinDistribution(t *testing.T) {
 	r := newDryRunner(t)
-	cfg, err := ConfigFromFlags([]string{"Singers=10", "Singers.Albums=5"}, nil)
+	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=1000"}, nil)
 	if err != nil {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
 	m := genTables(t, r, cfg)
-	if got := len(m["Singers"].rows); got != 10 {
+	if got := len(m["Singers"].generated); got != 10 {
 		t.Errorf("Singers rows = %d, want 10", got)
 	}
-	if got := len(m["Albums"].rows); got != 50 {
-		t.Errorf("Albums rows = %d, want 50 (10 x 5)", got)
+	if got := len(m["Albums"].generated); got != 1000 {
+		t.Errorf("Albums rows = %d, want 1000", got)
 	}
 
 	counts := map[any]int{}
-	for _, row := range m["Albums"].rows {
+	for _, row := range m["Albums"].generated {
 		counts[row["SingerId"]]++
 	}
 	if len(counts) != 10 {
 		t.Errorf("distinct parent keys = %d, want 10", len(counts))
 	}
 	for sid, c := range counts {
-		if c != 5 {
-			t.Errorf("parent %v has %d children, want 5", sid, c)
+		if c != 100 {
+			t.Errorf("parent %v has %d children, want 100 (even round-robin)", sid, c)
 		}
 	}
 }
@@ -95,7 +95,7 @@ func TestRunnerColumnRulesAndUniquePK(t *testing.T) {
 	}
 
 	m := genTables(t, r, cfg)
-	rows := m["Albums"].rows
+	rows := m["Albums"].generated
 	if len(rows) != 50 {
 		t.Fatalf("Albums rows = %d, want 50", len(rows))
 	}
@@ -118,7 +118,7 @@ func TestRunnerExcludesGeneratedColumn(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, _ := ConfigFromFlags([]string{"Singers=5"}, nil)
 	m := genTables(t, r, cfg)
-	for _, row := range m["Singers"].rows {
+	for _, row := range m["Singers"].generated {
 		if _, ok := row["FullName"]; ok {
 			t.Error("generated column FullName should not be populated")
 		}
@@ -128,7 +128,7 @@ func TestRunnerExcludesGeneratedColumn(t *testing.T) {
 func TestRunnerRunDryReturnsCounts(t *testing.T) {
 	r := newDryRunner(t)
 	r.DryRun = true
-	cfg, _ := ConfigFromFlags([]string{"Singers=3", "Singers.Albums=2"}, nil)
+	cfg, _ := ConfigFromFlags([]string{"Singers=3", "Albums=6"}, nil)
 
 	results, err := r.Run(context.Background(), cfg)
 	if err != nil {

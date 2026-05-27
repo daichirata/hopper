@@ -90,7 +90,7 @@ func TestE2EEmulator(t *testing.T) {
 	gen := NewGenerator(rand.New(rand.NewSource(1)))
 	runner := NewRunner(schema, gen, hc)
 
-	cfg, err := ConfigFromFlags([]string{"Singers=10", "Singers.Albums=3"}, nil)
+	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30"}, nil)
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

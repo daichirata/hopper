@@ -32,9 +32,8 @@ type genTable struct {
 	table     *Table
 	columns   map[string]ColumnRule
 	total     int
-	perParent int
 	parent    *genTable
-	rows      []map[string]any
+	generated []map[string]any
 }
 
 func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
@@ -52,39 +51,24 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 				return nil, err
 			}
 		}
-		results = append(results, Result{Table: gt.table.Name, Rows: len(gt.rows)})
+		results = append(results, Result{Table: gt.table.Name, Rows: len(gt.generated)})
 	}
 	return results, nil
 }
 
 func (r *Runner) plan(config *Config) ([]*genTable, error) {
-	specs := map[string]*TableSpec{}
-	var collect func([]*TableSpec)
-	collect = func(list []*TableSpec) {
-		for _, s := range list {
-			specs[s.Name] = s
-			collect(s.Children)
-		}
-	}
-	collect(config.Tables)
-
 	tables := map[string]*genTable{}
-	for name, s := range specs {
-		t, ok := r.schema.Table(name)
+	for _, s := range config.Tables {
+		t, ok := r.schema.Table(s.Name)
 		if !ok {
-			return nil, fmt.Errorf("table %q not found in schema", name)
+			return nil, fmt.Errorf("table %q not found in schema", s.Name)
 		}
 		for col := range s.Columns {
 			if _, ok := t.Column(col); !ok {
-				return nil, fmt.Errorf("table %q has no column %q", name, col)
+				return nil, fmt.Errorf("table %q has no column %q", s.Name, col)
 			}
 		}
-		tables[name] = &genTable{
-			table:     t,
-			columns:   s.Columns,
-			total:     s.Rows,
-			perParent: s.RowsPerParent,
-		}
+		tables[s.Name] = &genTable{table: t, columns: s.Columns, total: s.Rows}
 	}
 
 	for _, name := range sortedTableKeys(tables) {
@@ -95,13 +79,7 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 				return nil, fmt.Errorf("interleave parent %q of %q not found in schema", cur.Parent, cur.Name)
 			}
 			if _, exists := tables[p.Name]; !exists {
-				gt := &genTable{table: p}
-				if p.Parent == "" {
-					gt.total = 1
-				} else {
-					gt.perParent = 1
-				}
-				tables[p.Name] = gt
+				tables[p.Name] = &genTable{table: p, total: 1}
 			}
 			cur = p
 		}
@@ -118,44 +96,22 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 
 func (r *Runner) generate(order []*genTable) error {
 	for _, gt := range order {
-		switch {
-		case gt.parent == nil:
-			if gt.total <= 0 {
-				return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
-			}
-			for i := 0; i < gt.total; i++ {
-				row, err := r.generateRow(gt, nil, i)
-				if err != nil {
-					return err
+		if gt.total <= 0 {
+			return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
+		}
+		for i := 0; i < gt.total; i++ {
+			var parentRow map[string]any
+			if gt.parent != nil {
+				if len(gt.parent.generated) == 0 {
+					return fmt.Errorf("table %q: parent %q produced no rows", gt.table.Name, gt.parent.table.Name)
 				}
-				gt.rows = append(gt.rows, row)
+				parentRow = gt.parent.generated[i%len(gt.parent.generated)]
 			}
-		case gt.perParent > 0:
-			idx := 0
-			for _, prow := range gt.parent.rows {
-				for j := 0; j < gt.perParent; j++ {
-					row, err := r.generateRow(gt, prow, idx)
-					if err != nil {
-						return err
-					}
-					gt.rows = append(gt.rows, row)
-					idx++
-				}
+			row, err := r.generateRow(gt, parentRow, i)
+			if err != nil {
+				return err
 			}
-		case gt.total > 0:
-			if len(gt.parent.rows) == 0 {
-				continue
-			}
-			for i := 0; i < gt.total; i++ {
-				prow := gt.parent.rows[i%len(gt.parent.rows)]
-				row, err := r.generateRow(gt, prow, i)
-				if err != nil {
-					return err
-				}
-				gt.rows = append(gt.rows, row)
-			}
-		default:
-			return fmt.Errorf("table %q: missing row count", gt.table.Name)
+			gt.generated = append(gt.generated, row)
 		}
 	}
 	return nil
@@ -199,7 +155,7 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 }
 
 func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
-	if len(gt.rows) == 0 {
+	if len(gt.generated) == 0 {
 		return nil
 	}
 	cols := orderedColumns(gt.table)
@@ -217,7 +173,7 @@ func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
 		ms = ms[:0]
 		return nil
 	}
-	for _, row := range gt.rows {
+	for _, row := range gt.generated {
 		vals := make([]any, len(cols))
 		for i, c := range cols {
 			vals[i] = row[c]

@@ -14,11 +14,9 @@ type Config struct {
 }
 
 type TableSpec struct {
-	Name          string
-	Rows          int
-	RowsPerParent int
-	Columns       map[string]ColumnRule
-	Children      []*TableSpec
+	Name    string
+	Rows    int
+	Columns map[string]ColumnRule
 }
 
 type ColumnRule struct {
@@ -32,34 +30,18 @@ type RangeRule struct {
 }
 
 func (c *Config) Normalize() {
-	sortSpecs(c.Tables)
+	sort.Slice(c.Tables, func(i, j int) bool { return c.Tables[i].Name < c.Tables[j].Name })
 }
 
-func sortSpecs(specs []*TableSpec) {
-	sort.Slice(specs, func(i, j int) bool { return specs[i].Name < specs[j].Name })
-	for _, s := range specs {
-		sortSpecs(s.Children)
-	}
-}
-
-func (c *Config) ensureTable(path []string) *TableSpec {
-	siblings := &c.Tables
-	var node *TableSpec
-	for _, name := range path {
-		node = nil
-		for _, t := range *siblings {
-			if t.Name == name {
-				node = t
-				break
-			}
+func (c *Config) ensureTable(name string) *TableSpec {
+	for _, t := range c.Tables {
+		if t.Name == name {
+			return t
 		}
-		if node == nil {
-			node = &TableSpec{Name: name}
-			*siblings = append(*siblings, node)
-		}
-		siblings = &node.Children
 	}
-	return node
+	ts := &TableSpec{Name: name}
+	c.Tables = append(c.Tables, ts)
+	return ts
 }
 
 type yamlConfig struct {
@@ -67,10 +49,8 @@ type yamlConfig struct {
 }
 
 type yamlTable struct {
-	Rows          int                   `yaml:"rows"`
-	RowsPerParent int                   `yaml:"rows_per_parent"`
-	Columns       map[string]yamlColumn `yaml:"columns"`
-	Children      map[string]yamlTable  `yaml:"children"`
+	Rows    int                   `yaml:"rows"`
+	Columns map[string]yamlColumn `yaml:"columns"`
 }
 
 type yamlColumn struct {
@@ -85,36 +65,21 @@ func ConfigFromYAML(data []byte) (*Config, error) {
 	}
 	c := &Config{}
 	for name, yt := range yc.Tables {
-		ts, err := buildTableSpec(name, yt)
-		if err != nil {
-			return nil, err
+		ts := &TableSpec{Name: name, Rows: yt.Rows}
+		if len(yt.Columns) > 0 {
+			ts.Columns = make(map[string]ColumnRule, len(yt.Columns))
+			for col, ycol := range yt.Columns {
+				rule, err := ycol.toRule(name, col)
+				if err != nil {
+					return nil, err
+				}
+				ts.Columns[col] = rule
+			}
 		}
 		c.Tables = append(c.Tables, ts)
 	}
 	c.Normalize()
 	return c, nil
-}
-
-func buildTableSpec(name string, yt yamlTable) (*TableSpec, error) {
-	ts := &TableSpec{Name: name, Rows: yt.Rows, RowsPerParent: yt.RowsPerParent}
-	if len(yt.Columns) > 0 {
-		ts.Columns = make(map[string]ColumnRule, len(yt.Columns))
-		for col, yc := range yt.Columns {
-			rule, err := yc.toRule(name, col)
-			if err != nil {
-				return nil, err
-			}
-			ts.Columns[col] = rule
-		}
-	}
-	for childName, child := range yt.Children {
-		cs, err := buildTableSpec(childName, child)
-		if err != nil {
-			return nil, err
-		}
-		ts.Children = append(ts.Children, cs)
-	}
-	return ts, nil
 }
 
 func (yc yamlColumn) toRule(table, col string) (ColumnRule, error) {
@@ -131,23 +96,18 @@ func (yc yamlColumn) toRule(table, col string) (ColumnRule, error) {
 func ConfigFromFlags(tables []string, sets []string) (*Config, error) {
 	c := &Config{}
 	for _, t := range tables {
-		path, n, err := parseTableFlag(t)
+		name, n, err := parseTableFlag(t)
 		if err != nil {
 			return nil, err
 		}
-		node := c.ensureTable(path)
-		if len(path) == 1 {
-			node.Rows = n
-		} else {
-			node.RowsPerParent = n
-		}
+		c.ensureTable(name).Rows = n
 	}
 	for _, s := range sets {
-		path, col, rule, err := parseSetFlag(s)
+		table, col, rule, err := parseSetFlag(s)
 		if err != nil {
 			return nil, err
 		}
-		node := c.ensureTable(path)
+		node := c.ensureTable(table)
 		if node.Columns == nil {
 			node.Columns = map[string]ColumnRule{}
 		}
@@ -157,39 +117,41 @@ func ConfigFromFlags(tables []string, sets []string) (*Config, error) {
 	return c, nil
 }
 
-func parseTableFlag(s string) ([]string, int, error) {
-	pathStr, numStr, ok := strings.Cut(s, "=")
+func parseTableFlag(s string) (string, int, error) {
+	name, numStr, ok := strings.Cut(s, "=")
 	if !ok {
-		return nil, 0, fmt.Errorf("invalid --table %q (expected PATH=N)", s)
+		return "", 0, fmt.Errorf("invalid --table %q (expected TABLE=N)", s)
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(numStr))
 	if err != nil {
-		return nil, 0, fmt.Errorf("invalid count in --table %q: %w", s, err)
+		return "", 0, fmt.Errorf("invalid count in --table %q: %w", s, err)
 	}
-	path, err := splitPath(pathStr)
-	if err != nil {
-		return nil, 0, err
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", 0, fmt.Errorf("invalid --table %q (empty table name)", s)
 	}
-	return path, n, nil
+	return name, n, nil
 }
 
-func parseSetFlag(s string) ([]string, string, ColumnRule, error) {
+func parseSetFlag(s string) (string, string, ColumnRule, error) {
 	key, val, ok := strings.Cut(s, "=")
 	if !ok {
-		return nil, "", ColumnRule{}, fmt.Errorf("invalid --set %q (expected PATH.Column=RULE)", s)
+		return "", "", ColumnRule{}, fmt.Errorf("invalid --set %q (expected TABLE.COLUMN=RULE)", s)
 	}
 	rule, err := parseColumnRule(val)
 	if err != nil {
-		return nil, "", ColumnRule{}, fmt.Errorf("invalid --set %q: %w", s, err)
+		return "", "", ColumnRule{}, fmt.Errorf("invalid --set %q: %w", s, err)
 	}
-	segs, err := splitPath(key)
-	if err != nil {
-		return nil, "", ColumnRule{}, err
-	}
+	segs := strings.Split(strings.TrimSpace(key), ".")
 	if len(segs) < 2 {
-		return nil, "", ColumnRule{}, fmt.Errorf("invalid --set key %q (expected Table.Column or Path.Column)", key)
+		return "", "", ColumnRule{}, fmt.Errorf("invalid --set key %q (expected TABLE.COLUMN)", key)
 	}
-	return segs[:len(segs)-1], segs[len(segs)-1], rule, nil
+	table := segs[len(segs)-2]
+	col := segs[len(segs)-1]
+	if table == "" || col == "" {
+		return "", "", ColumnRule{}, fmt.Errorf("invalid --set key %q", key)
+	}
+	return table, col, rule, nil
 }
 
 func parseColumnRule(s string) (ColumnRule, error) {
@@ -228,14 +190,4 @@ func parseRange(s string) (*RangeRule, error) {
 		return nil, fmt.Errorf("invalid range %q: min > max", s)
 	}
 	return &RangeRule{Min: min, Max: max}, nil
-}
-
-func splitPath(s string) ([]string, error) {
-	segs := strings.Split(strings.TrimSpace(s), ".")
-	for _, seg := range segs {
-		if strings.TrimSpace(seg) == "" {
-			return nil, fmt.Errorf("invalid path %q (empty segment)", s)
-		}
-	}
-	return segs, nil
 }
