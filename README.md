@@ -1,8 +1,14 @@
-# hopper
+<p align="center">
+  <img src="static/logo.png" alt="hopper" width="320">
+</p>
 
-[![Test](https://github.com/daichirata/hopper/actions/workflows/test.yaml/badge.svg)](https://github.com/daichirata/hopper/actions/workflows/test.yaml)
-[![Release](https://img.shields.io/github/v/release/daichirata/hopper)](https://github.com/daichirata/hopper/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<h1 align="center">hopper</h1>
+
+<p align="center">
+  <a href="https://github.com/daichirata/hopper/actions/workflows/test.yaml"><img src="https://github.com/daichirata/hopper/actions/workflows/test.yaml/badge.svg" alt="Test"></a>
+  <a href="https://github.com/daichirata/hopper/releases/latest"><img src="https://img.shields.io/github/v/release/daichirata/hopper" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+</p>
 
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
 
