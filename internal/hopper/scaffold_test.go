@@ -19,11 +19,14 @@ func TestScaffold(t *testing.T) {
 	if !strings.Contains(out, `FirstName: "{{ FirstName }}"`) {
 		t.Errorf("missing FirstName suggestion:\n%s", out)
 	}
+	if !strings.Contains(out, "# SingerInfo:") {
+		t.Errorf("non-inferred column SingerInfo should be commented out:\n%s", out)
+	}
 	if strings.Contains(out, "SingerId") {
 		t.Error("primary key SingerId should be omitted")
 	}
-	if !strings.Contains(out, "# FullName:") {
-		t.Errorf("generated column FullName should be listed as a comment:\n%s", out)
+	if strings.Contains(out, "FullName") {
+		t.Error("generated column FullName should be omitted")
 	}
 
 	cfg, err := ConfigFromYAML([]byte(out))
