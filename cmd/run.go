@@ -68,6 +68,12 @@ var (
 			runner.Infer = !noInfer
 			runner.Truncate = truncate
 			runner.NullRate = nullRate
+			runner.Progress = func(table string, done, total int) {
+				fmt.Fprintf(os.Stderr, "\r%-24s %d/%d", table, done, total)
+				if done >= total {
+					fmt.Fprintln(os.Stderr)
+				}
+			}
 
 			results, err := runner.Run(ctx, config)
 			if err != nil {

@@ -14,6 +14,7 @@ CREATE TABLE Singers (
   SingerInfo BYTES(MAX),
   Tags       ARRAY<STRING(MAX)>,
   Nickname   STRING(MAX),
+  CreatedAt  TIMESTAMP OPTIONS (allow_commit_timestamp=true),
   FullName   STRING(MAX) AS (COALESCE(FirstName, '') || ' ' || COALESCE(LastName, '')) STORED,
 ) PRIMARY KEY (SingerId);
 
@@ -77,6 +78,14 @@ func TestParseSchema(t *testing.T) {
 	}
 	if !full.Generated {
 		t.Error("FullName should be flagged as generated")
+	}
+
+	created, ok := singers.Column("CreatedAt")
+	if !ok {
+		t.Fatal("CreatedAt column not found")
+	}
+	if !created.AllowCommitTimestamp {
+		t.Error("CreatedAt should allow commit timestamp")
 	}
 
 	albums, ok := s.Table("Albums")

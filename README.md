@@ -62,7 +62,8 @@ When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credential
 | `hopper version`           | print the version |
 
 The rest of this README covers `run`, the main command. Run `hopper <command> --help`
-for the full set of flags.
+for the full set of flags. While loading, `run` prints per-table progress
+(`Table  inserted/total`) to stderr.
 
 ## Tables and row counts
 
@@ -94,6 +95,7 @@ Every column is filled automatically; use `--set` to override specific ones.
 - **Other columns** are inferred from the column name when it matches a gofakeit
   function (`Email`, `FirstName`, `Phone`, …); otherwise a type-appropriate random
   value is used. Add `--no-infer` to disable name inference.
+- **Commit-timestamp** columns (`OPTIONS (allow_commit_timestamp=true)`) are set to the pending commit timestamp.
 - **Generated / stored** columns are skipped.
 - `--null-rate` (0–1) randomly leaves nullable columns NULL.
 
@@ -120,12 +122,17 @@ Every column is filled automatically; use `--set` to override specific ones.
 | `{{ Sentence 5 }}`                             | a 5-word sentence                         |
 | `{{ Index }}`                                  | row sequence number (0-based)             |
 | `{{ add Index 1 }}`                            | arithmetic: `add` `sub` `mul` `div` `mod` |
+| `{{ Col "FirstName" }}`                        | value of another column in the same row   |
 
-`{{ Index }}` and the arithmetic helpers are hopper additions; everything else is a
-gofakeit function (any [gofakeit function](https://github.com/brianvoe/gofakeit#functions)
+`{{ Index }}`, the arithmetic helpers, and `{{ Col }}` are hopper additions; everything
+else is a gofakeit function (any [gofakeit function](https://github.com/brianvoe/gofakeit#functions)
 works). Templates can be combined (`{{ FirstName }}-{{ Index }}`), and the result is
 converted to the column's type — use a numeric template for numeric columns. ARRAY
 columns get a single templated element (or a few random ones by default).
+
+`{{ Col "OtherColumn" }}` reads a column already generated for the same row, so you can
+derive one value from another (`--set 'Singers.Nickname={{ Col "FirstName" }}-{{ Index }}'`).
+Columns are generated in schema order, so reference only columns that come earlier.
 
 ## Configuration file
 

@@ -57,10 +57,11 @@ func (t *Table) IsUnique(name string) bool {
 }
 
 type Column struct {
-	Name      string
-	Type      ColumnType
-	NotNull   bool
-	Generated bool
+	Name                 string
+	Type                 ColumnType
+	NotNull              bool
+	Generated            bool
+	AllowCommitTimestamp bool
 }
 
 type ColumnType struct {
@@ -95,10 +96,11 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 				continue
 			}
 			t.Columns = append(t.Columns, &Column{
-				Name:      cd.Name.Name,
-				Type:      schemaType(cd.Type),
-				NotNull:   cd.NotNull,
-				Generated: isGenerated(cd),
+				Name:                 cd.Name.Name,
+				Type:                 schemaType(cd.Type),
+				NotNull:              cd.NotNull,
+				Generated:            isGenerated(cd),
+				AllowCommitTimestamp: allowCommitTimestamp(cd),
 			})
 		}
 		t.PrimaryKeys = primaryKeys(ct)
@@ -189,6 +191,20 @@ func schemaType(t ast.SchemaType) ColumnType {
 		return ct
 	}
 	return ColumnType{Base: ast.StringTypeName}
+}
+
+func allowCommitTimestamp(cd *ast.ColumnDef) bool {
+	if cd.Options == nil {
+		return false
+	}
+	for _, o := range cd.Options.Records {
+		if o.Name.Name == "allow_commit_timestamp" {
+			if b, ok := o.Value.(*ast.BoolLiteral); ok {
+				return b.Value
+			}
+		}
+	}
+	return false
 }
 
 func isGenerated(cd *ast.ColumnDef) bool {

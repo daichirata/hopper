@@ -42,8 +42,16 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-func (g *Generator) Pattern(col *Column, pattern string, index int) (any, error) {
-	funcs := template.FuncMap{"Index": func() int { return index }}
+func (g *Generator) Pattern(col *Column, pattern string, index int, row map[string]any) (any, error) {
+	funcs := template.FuncMap{
+		"Index": func() int { return index },
+		"Col": func(name string) any {
+			if v := row[name]; v != nil {
+				return v
+			}
+			return ""
+		},
+	}
 	for name, fn := range templateFuncs {
 		funcs[name] = fn
 	}
@@ -87,6 +95,9 @@ func (g *Generator) Unique(col *Column, index int) (any, error) {
 }
 
 func (g *Generator) Default(col *Column) (any, error) {
+	if col.AllowCommitTimestamp {
+		return spanner.CommitTimestamp, nil
+	}
 	if col.Type.IsArray {
 		return g.defaultArray(col)
 	}

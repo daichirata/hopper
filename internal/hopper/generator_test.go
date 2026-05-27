@@ -15,7 +15,7 @@ func TestGeneratorPatternNumber(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "MarketingBudget", Type: ColumnType{Base: ast.Int64TypeName}}
 	for i := 0; i < 100; i++ {
-		v, err := g.Pattern(col, "{{ Number 0 10 }}", i)
+		v, err := g.Pattern(col, "{{ Number 0 10 }}", i, nil)
 		if err != nil {
 			t.Fatalf("Pattern: %v", err)
 		}
@@ -32,7 +32,7 @@ func TestGeneratorPatternNumber(t *testing.T) {
 func TestGeneratorPatternIndex(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Name", Type: ColumnType{Base: ast.StringTypeName}}
-	v, err := g.Pattern(col, "user-{{ Index }}", 7)
+	v, err := g.Pattern(col, "user-{{ Index }}", 7, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestGeneratorPatternIndex(t *testing.T) {
 func TestGeneratorPatternArithmetic(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Id", Type: ColumnType{Base: ast.Int64TypeName}}
-	v, err := g.Pattern(col, "{{ add Index 1 }}", 0)
+	v, err := g.Pattern(col, "{{ add Index 1 }}", 0, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestGeneratorPatternFunctions(t *testing.T) {
 		`{{ FirstName }}-{{ Index }}`,
 	}
 	for _, p := range patterns {
-		if _, err := g.Pattern(col, p, 0); err != nil {
+		if _, err := g.Pattern(col, p, 0, nil); err != nil {
 			t.Errorf("Pattern(%q): %v", p, err)
 		}
 	}
@@ -140,7 +140,7 @@ func TestGeneratorGuess(t *testing.T) {
 func TestGeneratorArrayPattern(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Tags", Type: ColumnType{Base: ast.StringTypeName, IsArray: true}}
-	v, err := g.Pattern(col, "{{ Word }}", 0)
+	v, err := g.Pattern(col, "{{ Word }}", 0, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -165,12 +165,37 @@ func TestGeneratorInterval(t *testing.T) {
 		t.Errorf("Default type = %T, want spanner.Interval", v)
 	}
 
-	pv, err := g.Pattern(col, "P1Y2M3D", 0)
+	pv, err := g.Pattern(col, "P1Y2M3D", 0, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
 	if _, ok := pv.(spanner.Interval); !ok {
 		t.Errorf("Pattern type = %T, want spanner.Interval", pv)
+	}
+}
+
+func TestGeneratorPatternColRef(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Email", Type: ColumnType{Base: ast.StringTypeName}}
+	row := map[string]any{"FirstName": "ada"}
+	v, err := g.Pattern(col, `{{ Col "FirstName" }}@example.com`, 0, row)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if v.(string) != "ada@example.com" {
+		t.Errorf("Pattern = %q, want ada@example.com", v)
+	}
+}
+
+func TestGeneratorCommitTimestamp(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "CreatedAt", Type: ColumnType{Base: ast.TimestampTypeName}, AllowCommitTimestamp: true}
+	v, err := g.Default(col)
+	if err != nil {
+		t.Fatalf("Default: %v", err)
+	}
+	if v != spanner.CommitTimestamp {
+		t.Errorf("Default = %v, want spanner.CommitTimestamp", v)
 	}
 }
 

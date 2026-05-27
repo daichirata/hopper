@@ -28,6 +28,7 @@ type Runner struct {
 	Infer    bool
 	Truncate bool
 	NullRate float64
+	Progress func(table string, inserted, total int)
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
@@ -209,7 +210,7 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 			continue
 		}
 		if pattern, ok := gt.columns[col.Name]; ok {
-			v, err := r.gen.Pattern(col, pattern, index)
+			v, err := r.gen.Pattern(col, pattern, index, row)
 			if err != nil {
 				return nil, err
 			}
@@ -252,6 +253,7 @@ func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
 	batchRows = min(max(batchRows, 1), maxRowsPerCommit)
 
 	ms := make([]*spanner.Mutation, 0, batchRows)
+	inserted := 0
 	flush := func() error {
 		if len(ms) == 0 {
 			return nil
@@ -259,7 +261,11 @@ func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
 		if err := r.client.Apply(ctx, ms); err != nil {
 			return fmt.Errorf("insert into %s: %w", gt.table.Name, err)
 		}
+		inserted += len(ms)
 		ms = ms[:0]
+		if r.Progress != nil {
+			r.Progress(gt.table.Name, inserted, len(gt.generated))
+		}
 		return nil
 	}
 	for _, row := range gt.generated {

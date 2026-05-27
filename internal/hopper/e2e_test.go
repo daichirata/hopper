@@ -123,6 +123,10 @@ func TestE2EEmulator(t *testing.T) {
 		"SELECT COUNT(*) FROM Concerts c WHERE NOT EXISTS (SELECT 1 FROM Singers s WHERE s.SingerId = c.SingerId)"); got != 0 {
 		t.Errorf("orphan Concerts = %d, want 0", got)
 	}
+	if got := queryCount(ctx, t, sc,
+		"SELECT COUNT(*) FROM Singers WHERE CreatedAt > TIMESTAMP '2020-01-01T00:00:00Z'"); got == 0 {
+		t.Error("expected commit-timestamp CreatedAt to be populated on at least one Singer")
+	}
 }
 
 func queryCount(ctx context.Context, t *testing.T, sc *spanner.Client, sql string) int64 {
