@@ -187,6 +187,9 @@ func (g *Generator) Guess(col *Column) (any, bool) {
 	if !ok {
 		return nil, false
 	}
+	if col.Type.Size > 0 && int64(len(s)) > col.Type.Size {
+		return nil, false
+	}
 	if col.Type.Base == ast.BytesTypeName {
 		return []byte(s), true
 	}

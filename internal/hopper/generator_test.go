@@ -119,6 +119,9 @@ func TestGeneratorGuess(t *testing.T) {
 	if _, ok := g.Guess(&Column{Name: "Email", Type: ColumnType{Base: ast.Int64TypeName}}); ok {
 		t.Error("Guess on a non-string column should miss")
 	}
+	if _, ok := g.Guess(&Column{Name: "Email", Type: ColumnType{Base: ast.StringTypeName, Size: 3}}); ok {
+		t.Error("Guess should miss when the value exceeds the column size")
+	}
 }
 
 func typeName(v any) string {

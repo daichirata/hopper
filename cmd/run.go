@@ -30,7 +30,7 @@ var (
 			setFlags, _ := cmd.Flags().GetStringArray("set")
 			seed, _ := cmd.Flags().GetInt64("seed")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			infer, _ := cmd.Flags().GetBool("infer")
+			noInfer, _ := cmd.Flags().GetBool("no-infer")
 
 			if hopper.Scheme(databaseURI) != "spanner" {
 				return fmt.Errorf("DATABASE must be a spanner:// URI")
@@ -63,7 +63,7 @@ var (
 
 			runner := hopper.NewRunner(schema, gen, client)
 			runner.DryRun = dryRun
-			runner.Infer = infer
+			runner.Infer = !noInfer
 
 			results, err := runner.Run(ctx, config)
 			if err != nil {
@@ -98,7 +98,7 @@ func init() {
 	runCmd.Flags().StringArray("set", nil, "column template as TABLE.COLUMN=TEMPLATE (repeatable); gofakeit template, e.g. '{{ Number 0 100 }}' or '{{ FirstName }}-{{ Index }}'")
 	runCmd.Flags().Int64("seed", 0, "random seed (0 = time-based)")
 	runCmd.Flags().Bool("dry-run", false, "generate rows but do not insert")
-	runCmd.Flags().Bool("infer", false, "guess a gofakeit function from each unset column's name (e.g. Email, FirstName)")
+	runCmd.Flags().Bool("no-infer", false, "disable inferring a gofakeit function from unset column names")
 
 	rootCmd.AddCommand(runCmd)
 }

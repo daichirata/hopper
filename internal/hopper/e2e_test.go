@@ -88,6 +88,7 @@ func TestE2EEmulator(t *testing.T) {
 	}
 	gen := NewGenerator(1)
 	runner := NewRunner(schema, gen, hc)
+	runner.Infer = true
 
 	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30"}, nil)
 	if err != nil {

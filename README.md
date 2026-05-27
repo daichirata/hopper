@@ -102,14 +102,15 @@ gofakeit function. Templates can be combined (`{{ FirstName }}-{{ Index }}`). Th
 rendered string is converted to the column's type, so use a numeric template
 (`{{ Number ... }}`) for numeric columns.
 
-### Inferring from column names (`--infer`)
+### Inferring from column names
 
-With `--infer`, any unset STRING/BYTES column whose name matches a gofakeit
-function is filled with that function automatically: `Email` → emails,
-`FirstName` → first names, and likewise `Phone`, `Company`, `City`, `Country`, …
-Names are matched case-insensitively, ignoring underscores (`first_name` matches
+By default, any unset STRING/BYTES column whose name matches a gofakeit function
+is filled with that function automatically: `Email` → emails, `FirstName` →
+first names, and likewise `Phone`, `Company`, `City`, `Country`, … Names are
+matched case-insensitively, ignoring underscores (`first_name` matches
 `FirstName`). Explicit `--set` always wins, primary keys keep their unique
-values, and unmatched columns fall back to the type default.
+values, and anything unmatched — or whose value would not fit the column's
+declared size — falls back to the type default. Pass `--no-infer` to disable it.
 
 ## Config file
 
@@ -139,7 +140,7 @@ tables:
     --set             column template as TABLE.COLUMN=TEMPLATE (repeatable)
     --seed int        random seed (0 = time-based)
     --dry-run         generate rows but do not insert
-    --infer           guess a gofakeit function from each unset column's name
+    --no-infer        disable inferring a gofakeit function from column names
 ```
 
 ## Development
