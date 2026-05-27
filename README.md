@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="static/logo.png" alt="hopper" width="320">
+  <img src="static/logo.png" alt="hopper" width="480">
 </p>
 
 <h1 align="center">hopper</h1>
