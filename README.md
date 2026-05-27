@@ -1,12 +1,14 @@
 # hopper
 
 ```
-       ┌──────────────┐
-       │ ░ dummy rows │
-       └───┐      ┌───┘
-           └─┐  ┌─┘
-             ▼  ▼
-       Cloud Spanner
+        ▓ dummy rows ▓
+        ╔════════════╗
+        ║            ║
+        ╚═══╗    ╔═══╝
+            ╚╗  ╔╝
+             ╚══╝
+              ▼▼
+         Cloud Spanner
 ```
 
 `hopper` is a command-line tool to generate and load dummy data into Google Cloud Spanner.
@@ -25,6 +27,12 @@ The examples below use the [Spanner sample schema](https://cloud.google.com/span
 go install github.com/daichirata/hopper@latest
 ```
 
+Or use the Docker image, published to `ghcr.io/daichirata/hopper` on each tagged release:
+
+```
+docker run --rm ghcr.io/daichirata/hopper run --help
+```
+
 ## Quick start
 
 ```
@@ -39,6 +47,30 @@ spanner://projects/PROJECT/instances/INSTANCE/databases/DATABASE[?credentials=/p
 ```
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
+
+### With Docker
+
+`hopper` only loads data, so the database and schema must already exist. Against
+real Spanner, mount a service-account key and point the URI at it:
+
+```
+docker run --rm -v /path/to/key.json:/key.json \
+  ghcr.io/daichirata/hopper run \
+  'spanner://projects/P/instances/I/databases/D?credentials=/key.json' \
+  --table 'Singers=1000'
+```
+
+Against a local emulator, put both containers on one network:
+
+```
+docker network create hopper-net
+docker run -d --name spanner --network hopper-net gcr.io/cloud-spanner-emulator/emulator
+
+# create the instance/database/schema in the emulator first (e.g. with gcloud or hammer), then:
+docker run --rm --network hopper-net -e SPANNER_EMULATOR_HOST=spanner:9010 \
+  ghcr.io/daichirata/hopper run \
+  spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
+```
 
 ## Specifying tables and counts
 
