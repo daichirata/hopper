@@ -85,18 +85,25 @@ var (
 )
 
 func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Config, error) {
-	switch {
-	case configPath != "":
+	config := &hopper.Config{}
+	if configPath != "" {
 		data, err := os.ReadFile(configPath)
 		if err != nil {
 			return nil, err
 		}
-		return hopper.ConfigFromYAML(data)
-	case len(tableFlags) > 0 || len(setFlags) > 0:
-		return hopper.ConfigFromFlags(tableFlags, setFlags)
-	default:
+		config, err = hopper.ConfigFromYAML(data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := config.ApplyFlags(tableFlags, setFlags); err != nil {
+		return nil, err
+	}
+	config.Normalize()
+	if len(config.Tables) == 0 {
 		return nil, fmt.Errorf("specify --config or at least one --table")
 	}
+	return config, nil
 }
 
 func init() {

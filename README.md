@@ -156,6 +156,12 @@ tables:
     # SingerId and other parent keys are inherited automatically.
 ```
 
+`--config` can be combined with `--table` / `--set`, which override or extend the
+YAML (handy for bumping a row count or tweaking one column without editing the file).
+
+ARRAY columns get a few random elements by default, or a single templated element
+when you `--set` one.
+
 ## Flags
 
 ```

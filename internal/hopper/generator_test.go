@@ -3,6 +3,7 @@ package hopper
 import (
 	"testing"
 
+	"cloud.google.com/go/spanner"
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
 
@@ -133,6 +134,43 @@ func TestGeneratorGuess(t *testing.T) {
 	}
 	if _, ok := g.Guess(&Column{Name: "Email", Type: ColumnType{Base: ast.StringTypeName, Size: 3}}); ok {
 		t.Error("Guess should miss when the value exceeds the column size")
+	}
+}
+
+func TestGeneratorArrayPattern(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Tags", Type: ColumnType{Base: ast.StringTypeName, IsArray: true}}
+	v, err := g.Pattern(col, "{{ Word }}", 0)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	arr, ok := v.([]string)
+	if !ok {
+		t.Fatalf("value type = %T, want []string", v)
+	}
+	if len(arr) != 1 {
+		t.Errorf("array len = %d, want 1", len(arr))
+	}
+}
+
+func TestGeneratorInterval(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Span", Type: ColumnType{Base: ast.IntervalTypeName}}
+
+	v, err := g.Default(col)
+	if err != nil {
+		t.Fatalf("Default: %v", err)
+	}
+	if _, ok := v.(spanner.Interval); !ok {
+		t.Errorf("Default type = %T, want spanner.Interval", v)
+	}
+
+	pv, err := g.Pattern(col, "P1Y2M3D", 0)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if _, ok := pv.(spanner.Interval); !ok {
+		t.Errorf("Pattern type = %T, want spanner.Interval", pv)
 	}
 }
 

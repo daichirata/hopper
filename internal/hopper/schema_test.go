@@ -12,6 +12,7 @@ CREATE TABLE Singers (
   FirstName  STRING(1024),
   LastName   STRING(1024),
   SingerInfo BYTES(MAX),
+  Tags       ARRAY<STRING(MAX)>,
   FullName   STRING(MAX) AS (COALESCE(FirstName, '') || ' ' || COALESCE(LastName, '')) STORED,
 ) PRIMARY KEY (SingerId);
 

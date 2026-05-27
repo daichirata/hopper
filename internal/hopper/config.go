@@ -65,17 +65,25 @@ func ConfigFromYAML(data []byte) (*Config, error) {
 
 func ConfigFromFlags(tables []string, sets []string) (*Config, error) {
 	c := &Config{}
+	if err := c.ApplyFlags(tables, sets); err != nil {
+		return nil, err
+	}
+	c.Normalize()
+	return c, nil
+}
+
+func (c *Config) ApplyFlags(tables []string, sets []string) error {
 	for _, t := range tables {
 		name, n, err := parseTableFlag(t)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		c.ensureTable(name).Rows = n
 	}
 	for _, s := range sets {
 		table, col, pattern, err := parseSetFlag(s)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		node := c.ensureTable(table)
 		if node.Columns == nil {
@@ -83,8 +91,7 @@ func ConfigFromFlags(tables []string, sets []string) (*Config, error) {
 		}
 		node.Columns[col] = pattern
 	}
-	c.Normalize()
-	return c, nil
+	return nil
 }
 
 func parseTableFlag(s string) (string, int, error) {

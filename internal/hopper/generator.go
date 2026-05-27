@@ -113,6 +113,12 @@ func (g *Generator) scalar(base ast.ScalarTypeName, size int64) (any, error) {
 		return civil.DateOf(g.faker.Date()), nil
 	case ast.JSONTypeName:
 		return spanner.NullJSON{Value: map[string]any{"v": g.faker.Word()}, Valid: true}, nil
+	case ast.IntervalTypeName:
+		return spanner.Interval{
+			Months: int32(g.faker.Number(0, 24)),
+			Days:   int32(g.faker.Number(0, 28)),
+			Nanos:  big.NewInt(0),
+		}, nil
 	default:
 		return g.faker.LetterN(uint(stringLen(size))), nil
 	}
@@ -155,10 +161,18 @@ func (g *Generator) defaultArray(col *Column) (any, error) {
 }
 
 func (g *Generator) coerce(col *Column, s string) (any, error) {
-	if col.Type.IsArray {
-		return nil, fmt.Errorf("patterns are not supported for ARRAY columns")
+	v, err := coerceScalar(col.Type.Base, s)
+	if err != nil {
+		return nil, err
 	}
-	switch col.Type.Base {
+	if col.Type.IsArray {
+		return singletonArray(col.Type.Base, v), nil
+	}
+	return v, nil
+}
+
+func coerceScalar(base ast.ScalarTypeName, s string) (any, error) {
+	switch base {
 	case ast.StringTypeName:
 		return s, nil
 	case ast.BytesTypeName:
@@ -178,8 +192,29 @@ func (g *Generator) coerce(col *Column, s string) (any, error) {
 			return nil, fmt.Errorf("cannot parse %q as NUMERIC", s)
 		}
 		return r, nil
+	case ast.IntervalTypeName:
+		return spanner.ParseInterval(strings.TrimSpace(s))
 	default:
 		return s, nil
+	}
+}
+
+func singletonArray(base ast.ScalarTypeName, v any) any {
+	switch base {
+	case ast.StringTypeName:
+		return []string{v.(string)}
+	case ast.BytesTypeName:
+		return [][]byte{v.([]byte)}
+	case ast.Int64TypeName:
+		return []int64{v.(int64)}
+	case ast.Float64TypeName:
+		return []float64{v.(float64)}
+	case ast.Float32TypeName:
+		return []float32{v.(float32)}
+	case ast.BoolTypeName:
+		return []bool{v.(bool)}
+	default:
+		return []any{v}
 	}
 }
 
