@@ -264,6 +264,33 @@ func normalizeColumnName(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, "_", ""))
 }
 
+func (g *Generator) Suggest(col *Column) (string, bool) {
+	if col.Type.IsArray {
+		return "", false
+	}
+	if col.Type.Base != ast.StringTypeName && col.Type.Base != ast.BytesTypeName {
+		return "", false
+	}
+	if gofakeit.GetFuncLookup(normalizeColumnName(col.Name)) == nil {
+		return "", false
+	}
+	tmpl := "{{ " + pascalCase(col.Name) + " }}"
+	if _, err := g.faker.Template(tmpl, &gofakeit.TemplateOptions{}); err != nil {
+		return "", false
+	}
+	return tmpl, true
+}
+
+func pascalCase(name string) string {
+	parts := strings.FieldsFunc(name, func(r rune) bool { return r == '_' })
+	for i, p := range parts {
+		if p != "" {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
 func stringLen(size int64) int {
 	if size > 0 && size < defaultStringLen {
 		return int(size)
