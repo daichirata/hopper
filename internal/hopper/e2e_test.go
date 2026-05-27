@@ -90,7 +90,7 @@ func TestE2EEmulator(t *testing.T) {
 	runner := NewRunner(schema, gen, hc)
 	runner.Infer = true
 
-	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30"}, nil)
+	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30", "Concerts=15"}, nil)
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
@@ -113,6 +113,13 @@ func TestE2EEmulator(t *testing.T) {
 	if got := queryCount(ctx, t, sc,
 		"SELECT COUNT(*) FROM Albums a WHERE NOT EXISTS (SELECT 1 FROM Singers s WHERE s.SingerId = a.SingerId)"); got != 0 {
 		t.Errorf("orphan Albums = %d, want 0", got)
+	}
+	if got := queryCount(ctx, t, sc, "SELECT COUNT(*) FROM Concerts"); got != 15 {
+		t.Errorf("Concerts count = %d, want 15", got)
+	}
+	if got := queryCount(ctx, t, sc,
+		"SELECT COUNT(*) FROM Concerts c WHERE NOT EXISTS (SELECT 1 FROM Singers s WHERE s.SingerId = c.SingerId)"); got != 0 {
+		t.Errorf("orphan Concerts = %d, want 0", got)
 	}
 }
 

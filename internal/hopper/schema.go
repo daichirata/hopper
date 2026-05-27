@@ -24,6 +24,13 @@ type Table struct {
 	Columns     []*Column
 	PrimaryKeys []string
 	Parent      string
+	ForeignKeys []*ForeignKey
+}
+
+type ForeignKey struct {
+	Columns    []string
+	RefTable   string
+	RefColumns []string
 }
 
 func (t *Table) Column(name string) (*Column, bool) {
@@ -93,10 +100,48 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 		if ct.Cluster != nil {
 			t.Parent = pathName(ct.Cluster.TableName)
 		}
+		for _, tc := range ct.TableConstraints {
+			if fk, ok := tc.Constraint.(*ast.ForeignKey); ok {
+				t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk))
+			}
+		}
 		s.Tables = append(s.Tables, t)
 		s.byName[t.Name] = t
 	}
+	for _, stmt := range stmts {
+		at, ok := stmt.(*ast.AlterTable)
+		if !ok {
+			continue
+		}
+		add, ok := at.TableAlteration.(*ast.AddTableConstraint)
+		if !ok {
+			continue
+		}
+		fk, ok := add.TableConstraint.Constraint.(*ast.ForeignKey)
+		if !ok {
+			continue
+		}
+		if t, ok := s.byName[pathName(at.Name)]; ok {
+			t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk))
+		}
+	}
 	return s, nil
+}
+
+func foreignKey(fk *ast.ForeignKey) *ForeignKey {
+	return &ForeignKey{
+		Columns:    identNames(fk.Columns),
+		RefTable:   pathName(fk.ReferenceTable),
+		RefColumns: identNames(fk.ReferenceColumns),
+	}
+}
+
+func identNames(ids []*ast.Ident) []string {
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		names[i] = id.Name
+	}
+	return names
 }
 
 func pathName(p *ast.Path) string {

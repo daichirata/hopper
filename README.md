@@ -55,34 +55,6 @@ spanner://projects/{projectId}/instances/{instanceId}/databases/{databaseName}?c
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
 
-### With Docker
-
-`hopper` only loads data, so the database and schema must already exist. Against
-real Spanner, mount a service-account key and point the URI at it:
-
-```
-docker run --rm -v /path/to/key.json:/key.json \
-  ghcr.io/daichirata/hopper run \
-  'spanner://projects/P/instances/I/databases/D?credentials=/key.json' \
-  --table 'Singers=1000'
-```
-
-For a local emulator, run just the emulator with a small `compose.yaml`:
-
-```yaml
-services:
-  spanner:
-    image: gcr.io/cloud-spanner-emulator/emulator
-    ports: ["9010:9010", "9020:9020"]
-```
-
-```
-docker compose up -d
-export SPANNER_EMULATOR_HOST=localhost:9010
-# create the instance/database/schema (e.g. with gcloud or hammer), then:
-hopper run spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
-```
-
 ## Specifying tables and counts
 
 Each `--table TABLE=N` (repeatable) sets the **total** number of rows for a table:
@@ -111,6 +83,12 @@ chain (one row each) so the interleave constraints are satisfied:
 hopper run spanner://... --table 'Albums=300'
 # -> creates 1 Singers row and 300 Albums interleaved under it
 ```
+
+### Foreign keys
+
+`FOREIGN KEY` constraints are treated as dependencies too: referenced tables are
+generated first (and auto-completed if unspecified), and each FK column takes its
+value from a random row of the referenced table, so referential integrity holds.
 
 ## Column values
 

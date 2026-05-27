@@ -30,6 +30,13 @@ CREATE TABLE Songs (
   SongName STRING(MAX),
 ) PRIMARY KEY (SingerId, AlbumId, TrackId),
   INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
+
+CREATE TABLE Concerts (
+  ConcertId INT64 NOT NULL,
+  SingerId  INT64 NOT NULL,
+  Venue     STRING(MAX),
+  CONSTRAINT FK_ConcertSinger FOREIGN KEY (SingerId) REFERENCES Singers (SingerId),
+) PRIMARY KEY (ConcertId);
 `
 
 func TestParseSchema(t *testing.T) {
@@ -88,5 +95,17 @@ func TestParseSchema(t *testing.T) {
 	}
 	if songs.Parent != "Albums" {
 		t.Errorf("Songs.Parent = %q, want Albums", songs.Parent)
+	}
+
+	concerts, ok := s.Table("Concerts")
+	if !ok {
+		t.Fatal("Concerts table not found")
+	}
+	if len(concerts.ForeignKeys) != 1 {
+		t.Fatalf("Concerts.ForeignKeys = %d, want 1", len(concerts.ForeignKeys))
+	}
+	fk := concerts.ForeignKeys[0]
+	if fk.RefTable != "Singers" || len(fk.Columns) != 1 || fk.Columns[0] != "SingerId" || fk.RefColumns[0] != "SingerId" {
+		t.Errorf("Concerts FK = %+v, want SingerId -> Singers.SingerId", fk)
 	}
 }

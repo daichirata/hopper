@@ -34,7 +34,14 @@ type genTable struct {
 	columns   map[string]string
 	total     int
 	parent    *genTable
+	fkRefs    []*fkRef
 	generated []map[string]any
+}
+
+type fkRef struct {
+	parent     *genTable
+	columns    []string
+	refColumns []string
 }
 
 func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
@@ -72,17 +79,20 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 		tables[s.Name] = &genTable{table: t, columns: s.Columns, total: s.Rows}
 	}
 
-	for _, name := range sortedTableKeys(tables) {
-		cur := tables[name].table
-		for cur.Parent != "" {
-			p, ok := r.schema.Table(cur.Parent)
+	queue := sortedTableKeys(tables)
+	for len(queue) > 0 {
+		t := tables[queue[0]].table
+		queue = queue[1:]
+		for _, dep := range dependencies(t) {
+			if _, exists := tables[dep]; exists {
+				continue
+			}
+			dt, ok := r.schema.Table(dep)
 			if !ok {
-				return nil, fmt.Errorf("interleave parent %q of %q not found in schema", cur.Parent, cur.Name)
+				return nil, fmt.Errorf("referenced table %q of %q not found in schema", dep, t.Name)
 			}
-			if _, exists := tables[p.Name]; !exists {
-				tables[p.Name] = &genTable{table: p, total: 1}
-			}
-			cur = p
+			tables[dep] = &genTable{table: dt, total: 1}
+			queue = append(queue, dep)
 		}
 	}
 
@@ -90,9 +100,34 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 		if gt.table.Parent != "" {
 			gt.parent = tables[gt.table.Parent]
 		}
+		for _, fk := range gt.table.ForeignKeys {
+			if fk.RefTable == gt.table.Name {
+				continue
+			}
+			if p, ok := tables[fk.RefTable]; ok {
+				gt.fkRefs = append(gt.fkRefs, &fkRef{
+					parent:     p,
+					columns:    fk.Columns,
+					refColumns: fk.RefColumns,
+				})
+			}
+		}
 	}
 
 	return topoSort(tables)
+}
+
+func dependencies(t *Table) []string {
+	var deps []string
+	if t.Parent != "" {
+		deps = append(deps, t.Parent)
+	}
+	for _, fk := range t.ForeignKeys {
+		if fk.RefTable != t.Name {
+			deps = append(deps, fk.RefTable)
+		}
+	}
+	return deps
 }
 
 func (r *Runner) generate(order []*genTable) error {
@@ -119,6 +154,19 @@ func (r *Runner) generate(order []*genTable) error {
 }
 
 func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) (map[string]any, error) {
+	fkValues := map[string]any{}
+	for _, fk := range gt.fkRefs {
+		if len(fk.parent.generated) == 0 {
+			continue
+		}
+		prow := fk.parent.generated[r.gen.Intn(len(fk.parent.generated))]
+		for i, c := range fk.columns {
+			if i < len(fk.refColumns) {
+				fkValues[c] = prow[fk.refColumns[i]]
+			}
+		}
+	}
+
 	row := make(map[string]any, len(gt.table.Columns))
 	for _, col := range gt.table.Columns {
 		if col.Generated {
@@ -129,6 +177,10 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 				row[col.Name] = v
 				continue
 			}
+		}
+		if v, ok := fkValues[col.Name]; ok {
+			row[col.Name] = v
+			continue
 		}
 		if pattern, ok := gt.columns[col.Name]; ok {
 			v, err := r.gen.Pattern(col, pattern, index)
@@ -215,18 +267,30 @@ func topoSort(tables map[string]*genTable) ([]*genTable, error) {
 			if added[name] {
 				continue
 			}
-			gt := tables[name]
-			if gt.parent == nil || added[gt.parent.table.Name] {
-				order = append(order, gt)
-				added[name] = true
-				progress = true
+			if !ready(tables[name], added) {
+				continue
 			}
+			order = append(order, tables[name])
+			added[name] = true
+			progress = true
 		}
 		if !progress {
-			return nil, fmt.Errorf("cycle detected in interleave hierarchy")
+			return nil, fmt.Errorf("cycle detected in table dependencies")
 		}
 	}
 	return order, nil
+}
+
+func ready(gt *genTable, added map[string]bool) bool {
+	if gt.parent != nil && !added[gt.parent.table.Name] {
+		return false
+	}
+	for _, fk := range gt.fkRefs {
+		if !added[fk.parent.table.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 func sortedTableKeys(tables map[string]*genTable) []string {

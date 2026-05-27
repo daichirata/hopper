@@ -168,6 +168,13 @@ func (g *Generator) coerce(col *Column, s string) (any, error) {
 	}
 }
 
+func (g *Generator) Intn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return g.faker.IntN(n)
+}
+
 func (g *Generator) Guess(col *Column) (any, bool) {
 	if col.Type.IsArray {
 		return nil, false

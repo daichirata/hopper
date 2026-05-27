@@ -140,3 +140,52 @@ func TestRunnerRunDryReturnsCounts(t *testing.T) {
 		t.Errorf("counts = %v, want Singers:3 Albums:6", got)
 	}
 }
+
+func TestRunnerForeignKey(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, err := ConfigFromFlags([]string{"Singers=5", "Concerts=20"}, nil)
+	if err != nil {
+		t.Fatalf("ConfigFromFlags: %v", err)
+	}
+
+	m := genTables(t, r, cfg)
+	if got := len(m["Concerts"].generated); got != 20 {
+		t.Errorf("Concerts rows = %d, want 20", got)
+	}
+	if got := len(m["Singers"].generated); got != 5 {
+		t.Errorf("Singers rows = %d, want 5", got)
+	}
+
+	singerIDs := map[any]bool{}
+	for _, row := range m["Singers"].generated {
+		singerIDs[row["SingerId"]] = true
+	}
+	for _, row := range m["Concerts"].generated {
+		if !singerIDs[row["SingerId"]] {
+			t.Errorf("Concert SingerId %v not found among Singers", row["SingerId"])
+		}
+	}
+}
+
+func TestRunnerForeignKeyAutoComplete(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Concerts=20"}, nil)
+
+	m := genTables(t, r, cfg)
+	if _, ok := m["Singers"]; !ok {
+		t.Fatal("Singers should be auto-completed via the foreign key")
+	}
+	if got := len(m["Singers"].generated); got != 1 {
+		t.Errorf("auto-completed Singers rows = %d, want 1", got)
+	}
+
+	singerIDs := map[any]bool{}
+	for _, row := range m["Singers"].generated {
+		singerIDs[row["SingerId"]] = true
+	}
+	for _, row := range m["Concerts"].generated {
+		if !singerIDs[row["SingerId"]] {
+			t.Error("Concert references a non-existent Singer")
+		}
+	}
+}
