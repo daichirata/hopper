@@ -15,19 +15,15 @@ import (
 
 const defaultStringLen = 12
 
-// Generator produces dummy values for columns.
 type Generator struct {
 	rng       *rand.Rand
 	templates map[string]*Template
 }
 
-// NewGenerator creates a Generator backed by the given random source.
 func NewGenerator(rng *rand.Rand) *Generator {
 	return &Generator{rng: rng, templates: map[string]*Template{}}
 }
 
-// FromRule generates a value from an explicit column rule (template or range).
-// An empty rule falls back to Default.
 func (g *Generator) FromRule(col *Column, rule ColumnRule, index int) (any, error) {
 	switch {
 	case rule.Template != "":
@@ -71,7 +67,6 @@ func (g *Generator) template(text string) (*Template, error) {
 	return t, nil
 }
 
-// Unique generates a collision-free value for an (unconfigured) primary key column.
 func (g *Generator) Unique(col *Column, index int) (any, error) {
 	if col.Type.IsArray {
 		return g.Default(col)
@@ -100,7 +95,6 @@ func (g *Generator) Unique(col *Column, index int) (any, error) {
 	}
 }
 
-// Default generates a type-appropriate random value.
 func (g *Generator) Default(col *Column) (any, error) {
 	if col.Type.IsArray {
 		return g.defaultArray(col)
@@ -131,7 +125,6 @@ func (g *Generator) scalar(base ast.ScalarTypeName, size int64) (any, error) {
 	case ast.JSONTypeName:
 		return spanner.NullJSON{Value: map[string]any{"v": randString(g.rng, 6)}, Valid: true}, nil
 	default:
-		// TOKENLIST, INTERVAL and unknown types: fall back to a string token.
 		return randString(g.rng, stringLen(size)), nil
 	}
 }
@@ -191,7 +184,6 @@ func (g *Generator) coerceString(col *Column, s string) (any, error) {
 	case ast.BoolTypeName:
 		return strconv.ParseBool(s)
 	default:
-		// timestamp/date/numeric/json: pass the rendered token through as a string.
 		return s, nil
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Scheme returns the URI scheme (e.g. "spanner"), or "" if the URI is invalid.
 func Scheme(uri string) string {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -20,15 +19,12 @@ func Scheme(uri string) string {
 	return u.Scheme
 }
 
-// Client wraps the Spanner data and admin clients for a single database.
 type Client struct {
 	database string
 	client   *spanner.Client
 	admin    *database.DatabaseAdminClient
 }
 
-// NewClient connects to a Spanner database addressed by a
-// spanner://projects/P/instances/I/databases/D[?credentials=/path/to/key.json] URI.
 func NewClient(ctx context.Context, uri string) (*Client, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -57,7 +53,6 @@ func NewClient(ctx context.Context, uri string) (*Client, error) {
 	}, nil
 }
 
-// Close releases the underlying Spanner clients.
 func (c *Client) Close() {
 	if c.client != nil {
 		c.client.Close()
@@ -67,8 +62,6 @@ func (c *Client) Close() {
 	}
 }
 
-// GetDatabaseDDL returns the database schema as a single DDL string,
-// statements separated by ";\n".
 func (c *Client) GetDatabaseDDL(ctx context.Context) (string, error) {
 	resp, err := c.admin.GetDatabaseDdl(ctx, &databasepb.GetDatabaseDdlRequest{
 		Database: c.database,
@@ -79,7 +72,6 @@ func (c *Client) GetDatabaseDDL(ctx context.Context) (string, error) {
 	return strings.Join(resp.Statements, ";\n"), nil
 }
 
-// Apply commits the given mutations to the database.
 func (c *Client) Apply(ctx context.Context, ms []*spanner.Mutation) error {
 	_, err := c.client.Apply(ctx, ms)
 	return err

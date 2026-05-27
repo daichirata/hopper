@@ -7,20 +7,29 @@ import (
 )
 
 const testDDL = `
-CREATE TABLE Users (
-  UserId STRING(36) NOT NULL,
-  Name STRING(MAX),
-  ShardId INT64 NOT NULL,
-  CreatedAt TIMESTAMP NOT NULL,
-  FullName STRING(MAX) AS (Name) STORED,
-) PRIMARY KEY (UserId);
+CREATE TABLE Singers (
+  SingerId   INT64 NOT NULL,
+  FirstName  STRING(1024),
+  LastName   STRING(1024),
+  SingerInfo BYTES(MAX),
+  FullName   STRING(MAX) AS (COALESCE(FirstName, '') || ' ' || COALESCE(LastName, '')) STORED,
+) PRIMARY KEY (SingerId);
 
-CREATE TABLE UserAvatars (
-  UserId STRING(36) NOT NULL,
-  AvatarId INT64 NOT NULL,
-  Url STRING(MAX),
-) PRIMARY KEY (UserId, AvatarId),
-  INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Albums (
+  SingerId        INT64 NOT NULL,
+  AlbumId         INT64 NOT NULL,
+  AlbumTitle      STRING(MAX),
+  MarketingBudget INT64,
+) PRIMARY KEY (SingerId, AlbumId),
+  INTERLEAVE IN PARENT Singers ON DELETE CASCADE;
+
+CREATE TABLE Songs (
+  SingerId INT64 NOT NULL,
+  AlbumId  INT64 NOT NULL,
+  TrackId  INT64 NOT NULL,
+  SongName STRING(MAX),
+) PRIMARY KEY (SingerId, AlbumId, TrackId),
+  INTERLEAVE IN PARENT Albums ON DELETE CASCADE;
 `
 
 func TestParseSchema(t *testing.T) {
@@ -29,29 +38,29 @@ func TestParseSchema(t *testing.T) {
 		t.Fatalf("ParseSchema: %v", err)
 	}
 
-	users, ok := s.Table("Users")
+	singers, ok := s.Table("Singers")
 	if !ok {
-		t.Fatal("Users table not found")
+		t.Fatal("Singers table not found")
 	}
-	if users.Parent != "" {
-		t.Errorf("Users.Parent = %q, want empty", users.Parent)
+	if singers.Parent != "" {
+		t.Errorf("Singers.Parent = %q, want empty", singers.Parent)
 	}
-	if len(users.PrimaryKeys) != 1 || users.PrimaryKeys[0] != "UserId" {
-		t.Errorf("Users.PrimaryKeys = %v, want [UserId]", users.PrimaryKeys)
+	if len(singers.PrimaryKeys) != 1 || singers.PrimaryKeys[0] != "SingerId" {
+		t.Errorf("Singers.PrimaryKeys = %v, want [SingerId]", singers.PrimaryKeys)
 	}
 
-	uid, ok := users.Column("UserId")
+	sid, ok := singers.Column("SingerId")
 	if !ok {
-		t.Fatal("UserId column not found")
+		t.Fatal("SingerId column not found")
 	}
-	if uid.Type.Base != ast.StringTypeName || uid.Type.Size != 36 {
-		t.Errorf("UserId type = %+v, want STRING size 36", uid.Type)
+	if sid.Type.Base != ast.Int64TypeName {
+		t.Errorf("SingerId type = %+v, want INT64", sid.Type)
 	}
-	if !uid.NotNull {
-		t.Error("UserId should be NOT NULL")
+	if !sid.NotNull {
+		t.Error("SingerId should be NOT NULL")
 	}
 
-	full, ok := users.Column("FullName")
+	full, ok := singers.Column("FullName")
 	if !ok {
 		t.Fatal("FullName column not found")
 	}
@@ -59,17 +68,25 @@ func TestParseSchema(t *testing.T) {
 		t.Error("FullName should be flagged as generated")
 	}
 
-	av, ok := s.Table("UserAvatars")
+	albums, ok := s.Table("Albums")
 	if !ok {
-		t.Fatal("UserAvatars table not found")
+		t.Fatal("Albums table not found")
 	}
-	if av.Parent != "Users" {
-		t.Errorf("UserAvatars.Parent = %q, want Users", av.Parent)
+	if albums.Parent != "Singers" {
+		t.Errorf("Albums.Parent = %q, want Singers", albums.Parent)
 	}
-	if len(av.PrimaryKeys) != 2 {
-		t.Errorf("UserAvatars.PrimaryKeys = %v, want 2 keys", av.PrimaryKeys)
+	if len(albums.PrimaryKeys) != 2 {
+		t.Errorf("Albums.PrimaryKeys = %v, want 2 keys", albums.PrimaryKeys)
 	}
-	if !av.IsPrimaryKey("UserId") {
-		t.Error("UserId should be part of UserAvatars PK")
+	if !albums.IsPrimaryKey("SingerId") {
+		t.Error("SingerId should be part of Albums PK")
+	}
+
+	songs, ok := s.Table("Songs")
+	if !ok {
+		t.Fatal("Songs table not found")
+	}
+	if songs.Parent != "Albums" {
+		t.Errorf("Songs.Parent = %q, want Albums", songs.Parent)
 	}
 }

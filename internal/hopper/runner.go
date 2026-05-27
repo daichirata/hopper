@@ -8,21 +8,15 @@ import (
 	"cloud.google.com/go/spanner"
 )
 
-// maxCellsPerCommit keeps a commit comfortably under Spanner's mutation limit.
 const maxCellsPerCommit = 20000
 
-// maxRowsPerCommit caps the number of rows in a single commit.
 const maxRowsPerCommit = 1000
 
-// Result reports how many rows were generated for a table.
 type Result struct {
 	Table string
 	Rows  int
 }
 
-// Runner builds a generation plan from a schema and config, then generates and
-// inserts rows. If Client is nil (or DryRun is set) rows are generated but not
-// inserted, which is useful for tests.
 type Runner struct {
 	schema *Schema
 	gen    *Generator
@@ -30,23 +24,19 @@ type Runner struct {
 	DryRun bool
 }
 
-// NewRunner creates a Runner. client may be nil for generation-only (dry) runs.
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
 	return &Runner{schema: schema, gen: gen, client: client}
 }
 
-// genTable is a table in the generation plan.
 type genTable struct {
 	table     *Table
 	columns   map[string]ColumnRule
-	total     int // total rows (root, or "total mode" child)
-	perParent int // rows per parent row (child)
+	total     int
+	perParent int
 	parent    *genTable
 	rows      []map[string]any
 }
 
-// Run plans, generates and inserts rows, returning per-table counts in
-// generation (topological) order.
 func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 	order, err := r.plan(config)
 	if err != nil {
@@ -67,8 +57,6 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 	return results, nil
 }
 
-// plan flattens the config, completes interleave ancestors, links parents and
-// returns the tables in topological (parent-before-child) order.
 func (r *Runner) plan(config *Config) ([]*genTable, error) {
 	specs := map[string]*TableSpec{}
 	var collect func([]*TableSpec)
@@ -99,7 +87,6 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 		}
 	}
 
-	// Complete interleave ancestors that were not explicitly specified.
 	for _, name := range sortedTableKeys(tables) {
 		cur := tables[name].table
 		for cur.Parent != "" {
@@ -120,7 +107,6 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 		}
 	}
 
-	// Link parents.
 	for _, gt := range tables {
 		if gt.table.Parent != "" {
 			gt.parent = tables[gt.table.Parent]
@@ -181,7 +167,6 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 		if col.Generated {
 			continue
 		}
-		// Inherit parent primary key values (interleave integrity).
 		if parentRow != nil && gt.parent != nil && gt.parent.table.IsPrimaryKey(col.Name) {
 			if v, ok := parentRow[col.Name]; ok {
 				row[col.Name] = v
@@ -247,7 +232,6 @@ func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
 	return flush()
 }
 
-// orderedColumns lists the insertable columns (non-generated) in table order.
 func orderedColumns(t *Table) []string {
 	cols := make([]string, 0, len(t.Columns))
 	for _, c := range t.Columns {

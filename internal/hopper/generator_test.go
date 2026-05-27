@@ -13,7 +13,7 @@ func newTestGen() *Generator {
 
 func TestGeneratorRange(t *testing.T) {
 	g := newTestGen()
-	col := &Column{Name: "ShardId", Type: ColumnType{Base: ast.Int64TypeName}}
+	col := &Column{Name: "MarketingBudget", Type: ColumnType{Base: ast.Int64TypeName}}
 	for i := 0; i < 200; i++ {
 		v, err := g.FromRule(col, ColumnRule{Range: &RangeRule{Min: 0, Max: 10}}, i)
 		if err != nil {
@@ -51,7 +51,7 @@ func TestGeneratorDefaultTypes(t *testing.T) {
 	g := newTestGen()
 	cases := []struct {
 		base ast.ScalarTypeName
-		want string // %T
+		want string
 	}{
 		{ast.Int64TypeName, "int64"},
 		{ast.BoolTypeName, "bool"},

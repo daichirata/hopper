@@ -9,27 +9,23 @@ import (
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
 
-// Schema is the parsed structure of a Spanner database.
 type Schema struct {
 	Tables []*Table
 	byName map[string]*Table
 }
 
-// Table returns the table by name.
 func (s *Schema) Table(name string) (*Table, bool) {
 	t, ok := s.byName[name]
 	return t, ok
 }
 
-// Table is a single Spanner table.
 type Table struct {
 	Name        string
 	Columns     []*Column
-	PrimaryKeys []string // primary key column names, in key order
-	Parent      string   // INTERLEAVE IN PARENT table name, "" if none
+	PrimaryKeys []string
+	Parent      string
 }
 
-// Column returns the column by name.
 func (t *Table) Column(name string) (*Column, bool) {
 	for _, c := range t.Columns {
 		if c.Name == name {
@@ -39,7 +35,6 @@ func (t *Table) Column(name string) (*Column, bool) {
 	return nil, false
 }
 
-// IsPrimaryKey reports whether the named column is part of the primary key.
 func (t *Table) IsPrimaryKey(name string) bool {
 	for _, pk := range t.PrimaryKeys {
 		if pk == name {
@@ -49,24 +44,20 @@ func (t *Table) IsPrimaryKey(name string) bool {
 	return false
 }
 
-// Column is a single column definition.
 type Column struct {
 	Name      string
 	Type      ColumnType
 	NotNull   bool
-	Generated bool // generated/identity/auto_increment column; excluded from inserts
+	Generated bool
 }
 
-// ColumnType describes a column's Spanner type.
 type ColumnType struct {
-	Base    ast.ScalarTypeName // e.g. ast.Int64TypeName, ast.StringTypeName
+	Base    ast.ScalarTypeName
 	IsArray bool
-	Size    int64 // STRING(N)/BYTES(N) length; 0 when MAX or not applicable
+	Size    int64
 }
 
-// ParseSchema parses a Spanner DDL string into a Schema.
 func ParseSchema(uri, ddl string) (*Schema, error) {
-	// Normalize into ";"-terminated statements, mirroring hammer's ParseDDL.
 	var lines []string
 	for _, line := range strings.Split(ddl, ";") {
 		if strings.TrimSpace(line) == "" {
@@ -88,7 +79,6 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 		}
 		t := &Table{Name: pathName(ct.Name)}
 		for _, cd := range ct.Columns {
-			// Skip hidden columns (Hidden is an invalid pos when not hidden).
 			if !cd.Hidden.Invalid() {
 				continue
 			}
@@ -109,7 +99,6 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 	return s, nil
 }
 
-// pathName joins a dot-chained identifier path (e.g. schema-qualified names).
 func pathName(p *ast.Path) string {
 	if p == nil || len(p.Idents) == 0 {
 		return ""
@@ -159,7 +148,6 @@ func primaryKeys(ct *ast.CreateTable) []string {
 		}
 		return keys
 	}
-	// Fall back to column-level PRIMARY KEY.
 	var keys []string
 	for _, cd := range ct.Columns {
 		if cd.PrimaryKey {

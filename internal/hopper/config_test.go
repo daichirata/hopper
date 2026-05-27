@@ -8,14 +8,15 @@ import (
 func TestConfigYAMLAndFlagsEquivalent(t *testing.T) {
 	yamlSrc := []byte(`
 tables:
-  Users:
+  Singers:
     rows: 10
     columns:
-      Name: { template: "{ .Random }-{ .Index }" }
-      ShardId: { range: [0, 10] }
+      FirstName: { template: "{ .Random }-{ .Index }" }
     children:
-      UserAvatars:
+      Albums:
         rows_per_parent: 5
+        columns:
+          MarketingBudget: { range: [0, 10] }
 `)
 
 	fromYAML, err := ConfigFromYAML(yamlSrc)
@@ -24,8 +25,8 @@ tables:
 	}
 
 	fromFlags, err := ConfigFromFlags(
-		[]string{"Users=10", "Users.UserAvatars=5"},
-		[]string{"Users.Name=template:{ .Random }-{ .Index }", "Users.ShardId=range:0-10"},
+		[]string{"Singers=10", "Singers.Albums=5"},
+		[]string{"Singers.FirstName=template:{ .Random }-{ .Index }", "Singers.Albums.MarketingBudget=range:0-10"},
 	)
 	if err != nil {
 		t.Fatalf("ConfigFromFlags: %v", err)
@@ -42,14 +43,14 @@ func dumpConfig(c *Config) string {
 	walk = func(specs []*TableSpec, depth string) {
 		for _, s := range specs {
 			b = append(b, []byte(depth+s.Name)...)
-			b = append(b, []byte("{")...)
+			b = append(b, '{')
 			for k, v := range s.Columns {
 				b = append(b, []byte(k+":"+v.Template)...)
 				if v.Range != nil {
 					b = append(b, []byte("range")...)
 				}
 			}
-			b = append(b, []byte("}")...)
+			b = append(b, '}')
 			walk(s.Children, depth+"  ")
 		}
 	}

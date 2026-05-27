@@ -10,6 +10,8 @@ to generate per parent.
 
 It is a companion to [hammer](https://github.com/daichirata/hammer) (schema management for Spanner).
 
+The examples below use the [Spanner sample schema](https://cloud.google.com/spanner/docs/schema-and-data-model) (`Singers` → `Albums` → `Songs`, interleaved).
+
 ## Installation
 
 ```
@@ -19,8 +21,8 @@ go install github.com/daichirata/hopper@latest
 ## Quick start
 
 ```
-# 1000 rows into Users (primary key auto-generated, other columns randomized)
-hopper run spanner://projects/p/instances/i/databases/d --table 'Users=1000'
+# 1000 rows into Singers (primary key auto-generated, other columns randomized)
+hopper run spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
 ```
 
 The database is addressed by a `spanner://` URI, the same form hammer uses:
@@ -37,13 +39,21 @@ Tables are given with `--table PATH=N` (repeatable). The dotted path expresses
 the interleave hierarchy:
 
 ```
---table 'Users=1000'                       # root: 1000 rows in total
---table 'Users.UserAvatars=100'            # child: 100 rows per parent User
---table 'Users.UserAvatars.AvatarTags=5'   # grandchild: 5 rows per parent UserAvatar
+--table 'Singers=1000'                  # root: 1000 rows in total
+--table 'Singers.Albums=100'            # child: 100 rows per parent Singer
+--table 'Singers.Albums.Songs=5'        # grandchild: 5 rows per parent Album
 ```
 
 - A path with **no dot** sets the **total** number of rows.
 - A path **with dots** sets the number of rows **per parent**.
+
+When both a parent and a child are given as totals (no dots), the child rows are
+distributed across the parent rows round-robin:
+
+```
+--table 'Singers=300' --table 'Albums=300'   # 300 Albums spread across 300 Singers (1 each)
+--table 'Singers=10'  --table 'Albums=300'   # 300 Albums spread across 10 Singers (~30 each)
+```
 
 ### Auto-completing parents
 
@@ -51,8 +61,8 @@ If you specify a child table on its own, hopper automatically creates the parent
 chain (one row each) so the interleave constraints are satisfied:
 
 ```
-hopper run spanner://... --table 'UserAvatars=300'
-# -> creates 1 Users row and 300 UserAvatars interleaved under it
+hopper run spanner://... --table 'Albums=300'
+# -> creates 1 Singers row and 300 Albums interleaved under it
 ```
 
 ## Column rules
@@ -62,8 +72,8 @@ columns get a collision-free unique value (UUID for STRING, sequential for
 INT64, and so on). Override a column with `--set PATH.Column=RULE`:
 
 ```
---set 'Users.ShardId=range:0-10'                     # random integer in [0, 10]
---set 'Users.Name=template:{ .Random }-{ .Index }'   # text/template with { } delimiters
+--set 'Singers.Albums.MarketingBudget=range:0-1000000'      # random integer in [0, 1000000]
+--set 'Singers.FirstName=template:{ .Random }-{ .Index }'   # text/template with { } delimiters
 ```
 
 Templates expose:
@@ -82,17 +92,16 @@ to the CLI model:
 
 ```yaml
 tables:
-  Users:
+  Singers:
     rows: 1000
     columns:
-      ShardId: { range: [0, 10] }
-      Name:    { template: "{ .Random }-{ .Index }" }
+      FirstName: { template: "{ .Random }-{ .Index }" }
     children:
-      UserAvatars:
+      Albums:
         rows_per_parent: 100
         columns:
-          Url: { template: "https://example.com/{ .Random }.png" }
-        # UserId and other parent keys are inherited automatically.
+          MarketingBudget: { range: [0, 1000000] }
+        # SingerId and other parent keys are inherited automatically.
 ```
 
 ## Flags

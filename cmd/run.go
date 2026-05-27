@@ -13,25 +13,9 @@ import (
 )
 
 var (
-	runExample = `
-* Load 1000 rows into Users (PK auto-generated, other columns type-default)
-  hopper run spanner://projects/p/instances/i/databases/d --table 'Users=1000'
-
-* Interleaved children: 100 UserAvatars per User, with column rules
-  hopper run spanner://projects/p/instances/i/databases/d \
-    --table 'Users=10' --table 'Users.UserAvatars=100' \
-    --set 'Users.Name=template:{ .Random }-{ .Index }' --set 'Users.ShardId=range:0-10'
-
-* Child only (parent is auto-completed)
-  hopper run spanner://projects/p/instances/i/databases/d --table 'UserAvatars=300'
-
-* From a config file
-  hopper run spanner://projects/p/instances/i/databases/d --config hopper.yaml`
-
 	runCmd = &cobra.Command{
-		Use:     "run DATABASE",
-		Short:   "Generate and load dummy data into Spanner",
-		Example: runExample,
+		Use:   "run DATABASE",
+		Short: "Generate and load dummy data into Spanner",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("must specify 1 argument (DATABASE)")
@@ -108,9 +92,9 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 }
 
 func init() {
-	runCmd.Flags().StringP("config", "c", "", "path to YAML config file")
-	runCmd.Flags().StringArray("table", nil, "table rows as PATH=N (e.g. 'Users=1000' or 'Users.UserAvatars=100')")
-	runCmd.Flags().StringArray("set", nil, "column rule as PATH.Column=RULE (e.g. 'Users.Name=template:{ .Random }-{ .Index }')")
+	runCmd.Flags().StringP("config", "c", "", "path to a YAML config file")
+	runCmd.Flags().StringArray("table", nil, "rows to generate as PATH=N (repeatable); a dotted PATH sets rows per parent")
+	runCmd.Flags().StringArray("set", nil, "column rule as PATH.COLUMN=RULE (repeatable); RULE is template:<tmpl> or range:<min>-<max>")
 	runCmd.Flags().Int64("seed", 0, "random seed (0 = time-based)")
 	runCmd.Flags().Bool("dry-run", false, "generate rows but do not insert")
 

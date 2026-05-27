@@ -25,7 +25,6 @@ func TestTemplateRender(t *testing.T) {
 		t.Errorf("random prefix = %q (len %d), want len 8", prefix, len(prefix))
 	}
 
-	// .Random should differ between renders.
 	a, _ := tpl.Render(0, rng)
 	b, _ := tpl.Render(0, rng)
 	if a == b {

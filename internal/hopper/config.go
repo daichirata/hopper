@@ -9,35 +9,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the generation plan input, shared by the YAML and CLI front-ends.
 type Config struct {
 	Tables []*TableSpec
 }
 
-// TableSpec describes how many rows to generate for a table and its children.
 type TableSpec struct {
 	Name          string
-	Rows          int // root table: total number of rows
-	RowsPerParent int // child table: rows generated per parent row
+	Rows          int
+	RowsPerParent int
 	Columns       map[string]ColumnRule
 	Children      []*TableSpec
 }
 
-// ColumnRule overrides how a single column's value is generated.
-// Zero value (no template, no range) means "use the type default".
 type ColumnRule struct {
 	Template string
 	Range    *RangeRule
 }
 
-// RangeRule generates an integer in the inclusive range [Min, Max].
 type RangeRule struct {
 	Min int64
 	Max int64
 }
 
-// Normalize sorts tables and children by name so that YAML- and CLI-built
-// configs compare equal and generation is deterministic.
 func (c *Config) Normalize() {
 	sortSpecs(c.Tables)
 }
@@ -49,7 +42,6 @@ func sortSpecs(specs []*TableSpec) {
 	}
 }
 
-// ensureTable walks/creates the table tree along path and returns the leaf node.
 func (c *Config) ensureTable(path []string) *TableSpec {
 	siblings := &c.Tables
 	var node *TableSpec
@@ -70,8 +62,6 @@ func (c *Config) ensureTable(path []string) *TableSpec {
 	return node
 }
 
-// --- YAML front-end ---
-
 type yamlConfig struct {
 	Tables map[string]yamlTable `yaml:"tables"`
 }
@@ -88,7 +78,6 @@ type yamlColumn struct {
 	Range    []int64 `yaml:"range"`
 }
 
-// ConfigFromYAML parses a YAML configuration into a Config.
 func ConfigFromYAML(data []byte) (*Config, error) {
 	var yc yamlConfig
 	if err := yaml.Unmarshal(data, &yc); err != nil {
@@ -139,12 +128,6 @@ func (yc yamlColumn) toRule(table, col string) (ColumnRule, error) {
 	return rule, nil
 }
 
-// --- CLI front-end ---
-
-// ConfigFromFlags builds a Config from repeated --table and --set flags.
-//
-//	tables: "Users=1000", "Users.UserAvatars=100"  (dotted path; depth 1 = total rows, deeper = rows per parent)
-//	sets:   "Users.Name=template:{ .Random }-{ .Index }", "Users.ShardId=range:0-10"
 func ConfigFromFlags(tables []string, sets []string) (*Config, error) {
 	c := &Config{}
 	for _, t := range tables {

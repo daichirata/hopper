@@ -8,7 +8,6 @@ var (
 	rootCmd = &cobra.Command{
 		Use:          "hopper",
 		Short:        "hopper is a command-line tool to load dummy data into Google Cloud Spanner.",
-		Example:      runExample,
 		SilenceUsage: true,
 	}
 )
