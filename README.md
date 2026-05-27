@@ -60,25 +60,20 @@ docker run --rm -v /path/to/key.json:/key.json \
   --table 'Singers=1000'
 ```
 
-Against a local emulator, a small `compose.yaml` keeps the wiring simple:
+For a local emulator, run just the emulator with a small `compose.yaml`:
 
 ```yaml
 services:
   spanner:
     image: gcr.io/cloud-spanner-emulator/emulator
     ports: ["9010:9010", "9020:9020"]
-  hopper:
-    image: ghcr.io/daichirata/hopper
-    depends_on: [spanner]
-    environment:
-      SPANNER_EMULATOR_HOST: spanner:9010
-    command: ["run", "spanner://projects/p/instances/i/databases/d", "--table", "Singers=1000"]
 ```
 
 ```
-docker compose up -d spanner
-# create the instance/database/schema in the emulator (e.g. with gcloud or hammer), then:
-docker compose run --rm hopper
+docker compose up -d
+export SPANNER_EMULATOR_HOST=localhost:9010
+# create the instance/database/schema (e.g. with gcloud or hammer), then:
+hopper run spanner://projects/p/instances/i/databases/d --table 'Singers=1000'
 ```
 
 ## Specifying tables and counts
