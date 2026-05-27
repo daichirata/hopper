@@ -1,0 +1,292 @@
+package hopper
+
+import (
+	"context"
+	"fmt"
+	"sort"
+
+	"cloud.google.com/go/spanner"
+)
+
+// maxCellsPerCommit keeps a commit comfortably under Spanner's mutation limit.
+const maxCellsPerCommit = 20000
+
+// maxRowsPerCommit caps the number of rows in a single commit.
+const maxRowsPerCommit = 1000
+
+// Result reports how many rows were generated for a table.
+type Result struct {
+	Table string
+	Rows  int
+}
+
+// Runner builds a generation plan from a schema and config, then generates and
+// inserts rows. If Client is nil (or DryRun is set) rows are generated but not
+// inserted, which is useful for tests.
+type Runner struct {
+	schema *Schema
+	gen    *Generator
+	client *Client
+	DryRun bool
+}
+
+// NewRunner creates a Runner. client may be nil for generation-only (dry) runs.
+func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
+	return &Runner{schema: schema, gen: gen, client: client}
+}
+
+// genTable is a table in the generation plan.
+type genTable struct {
+	table     *Table
+	columns   map[string]ColumnRule
+	total     int // total rows (root, or "total mode" child)
+	perParent int // rows per parent row (child)
+	parent    *genTable
+	rows      []map[string]any
+}
+
+// Run plans, generates and inserts rows, returning per-table counts in
+// generation (topological) order.
+func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
+	order, err := r.plan(config)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.generate(order); err != nil {
+		return nil, err
+	}
+	results := make([]Result, 0, len(order))
+	for _, gt := range order {
+		if !r.DryRun && r.client != nil {
+			if err := r.insertTable(ctx, gt); err != nil {
+				return nil, err
+			}
+		}
+		results = append(results, Result{Table: gt.table.Name, Rows: len(gt.rows)})
+	}
+	return results, nil
+}
+
+// plan flattens the config, completes interleave ancestors, links parents and
+// returns the tables in topological (parent-before-child) order.
+func (r *Runner) plan(config *Config) ([]*genTable, error) {
+	specs := map[string]*TableSpec{}
+	var collect func([]*TableSpec)
+	collect = func(list []*TableSpec) {
+		for _, s := range list {
+			specs[s.Name] = s
+			collect(s.Children)
+		}
+	}
+	collect(config.Tables)
+
+	tables := map[string]*genTable{}
+	for name, s := range specs {
+		t, ok := r.schema.Table(name)
+		if !ok {
+			return nil, fmt.Errorf("table %q not found in schema", name)
+		}
+		for col := range s.Columns {
+			if _, ok := t.Column(col); !ok {
+				return nil, fmt.Errorf("table %q has no column %q", name, col)
+			}
+		}
+		tables[name] = &genTable{
+			table:     t,
+			columns:   s.Columns,
+			total:     s.Rows,
+			perParent: s.RowsPerParent,
+		}
+	}
+
+	// Complete interleave ancestors that were not explicitly specified.
+	for _, name := range sortedTableKeys(tables) {
+		cur := tables[name].table
+		for cur.Parent != "" {
+			p, ok := r.schema.Table(cur.Parent)
+			if !ok {
+				return nil, fmt.Errorf("interleave parent %q of %q not found in schema", cur.Parent, cur.Name)
+			}
+			if _, exists := tables[p.Name]; !exists {
+				gt := &genTable{table: p}
+				if p.Parent == "" {
+					gt.total = 1
+				} else {
+					gt.perParent = 1
+				}
+				tables[p.Name] = gt
+			}
+			cur = p
+		}
+	}
+
+	// Link parents.
+	for _, gt := range tables {
+		if gt.table.Parent != "" {
+			gt.parent = tables[gt.table.Parent]
+		}
+	}
+
+	return topoSort(tables)
+}
+
+func (r *Runner) generate(order []*genTable) error {
+	for _, gt := range order {
+		switch {
+		case gt.parent == nil:
+			if gt.total <= 0 {
+				return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
+			}
+			for i := 0; i < gt.total; i++ {
+				row, err := r.generateRow(gt, nil, i)
+				if err != nil {
+					return err
+				}
+				gt.rows = append(gt.rows, row)
+			}
+		case gt.perParent > 0:
+			idx := 0
+			for _, prow := range gt.parent.rows {
+				for j := 0; j < gt.perParent; j++ {
+					row, err := r.generateRow(gt, prow, idx)
+					if err != nil {
+						return err
+					}
+					gt.rows = append(gt.rows, row)
+					idx++
+				}
+			}
+		case gt.total > 0:
+			if len(gt.parent.rows) == 0 {
+				continue
+			}
+			for i := 0; i < gt.total; i++ {
+				prow := gt.parent.rows[i%len(gt.parent.rows)]
+				row, err := r.generateRow(gt, prow, i)
+				if err != nil {
+					return err
+				}
+				gt.rows = append(gt.rows, row)
+			}
+		default:
+			return fmt.Errorf("table %q: missing row count", gt.table.Name)
+		}
+	}
+	return nil
+}
+
+func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) (map[string]any, error) {
+	row := make(map[string]any, len(gt.table.Columns))
+	for _, col := range gt.table.Columns {
+		if col.Generated {
+			continue
+		}
+		// Inherit parent primary key values (interleave integrity).
+		if parentRow != nil && gt.parent != nil && gt.parent.table.IsPrimaryKey(col.Name) {
+			if v, ok := parentRow[col.Name]; ok {
+				row[col.Name] = v
+				continue
+			}
+		}
+		if rule, ok := gt.columns[col.Name]; ok {
+			v, err := r.gen.FromRule(col, rule, index)
+			if err != nil {
+				return nil, err
+			}
+			row[col.Name] = v
+			continue
+		}
+		if gt.table.IsPrimaryKey(col.Name) {
+			v, err := r.gen.Unique(col, index)
+			if err != nil {
+				return nil, err
+			}
+			row[col.Name] = v
+			continue
+		}
+		v, err := r.gen.Default(col)
+		if err != nil {
+			return nil, err
+		}
+		row[col.Name] = v
+	}
+	return row, nil
+}
+
+func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
+	if len(gt.rows) == 0 {
+		return nil
+	}
+	cols := orderedColumns(gt.table)
+	batchRows := maxCellsPerCommit / max(1, len(cols))
+	batchRows = min(max(batchRows, 1), maxRowsPerCommit)
+
+	ms := make([]*spanner.Mutation, 0, batchRows)
+	flush := func() error {
+		if len(ms) == 0 {
+			return nil
+		}
+		if err := r.client.Apply(ctx, ms); err != nil {
+			return fmt.Errorf("insert into %s: %w", gt.table.Name, err)
+		}
+		ms = ms[:0]
+		return nil
+	}
+	for _, row := range gt.rows {
+		vals := make([]any, len(cols))
+		for i, c := range cols {
+			vals[i] = row[c]
+		}
+		ms = append(ms, spanner.InsertOrUpdate(gt.table.Name, cols, vals))
+		if len(ms) >= batchRows {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	return flush()
+}
+
+// orderedColumns lists the insertable columns (non-generated) in table order.
+func orderedColumns(t *Table) []string {
+	cols := make([]string, 0, len(t.Columns))
+	for _, c := range t.Columns {
+		if c.Generated {
+			continue
+		}
+		cols = append(cols, c.Name)
+	}
+	return cols
+}
+
+func topoSort(tables map[string]*genTable) ([]*genTable, error) {
+	order := make([]*genTable, 0, len(tables))
+	added := make(map[string]bool, len(tables))
+	for len(order) < len(tables) {
+		progress := false
+		for _, name := range sortedTableKeys(tables) {
+			if added[name] {
+				continue
+			}
+			gt := tables[name]
+			if gt.parent == nil || added[gt.parent.table.Name] {
+				order = append(order, gt)
+				added[name] = true
+				progress = true
+			}
+		}
+		if !progress {
+			return nil, fmt.Errorf("cycle detected in interleave hierarchy")
+		}
+	}
+	return order, nil
+}
+
+func sortedTableKeys(tables map[string]*genTable) []string {
+	keys := make([]string, 0, len(tables))
+	for k := range tables {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
