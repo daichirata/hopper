@@ -239,6 +239,21 @@ func TestRunnerThreeLevelAutoComplete(t *testing.T) {
 	}
 }
 
+func TestRunnerUniqueIndex(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Singers=50"}, nil)
+
+	m := genTables(t, r, cfg)
+	seen := map[any]bool{}
+	for _, row := range m["Singers"].generated {
+		nick := row["Nickname"]
+		if seen[nick] {
+			t.Errorf("duplicate value %v in unique-indexed column Nickname", nick)
+		}
+		seen[nick] = true
+	}
+}
+
 func TestRunnerNullRate(t *testing.T) {
 	r := newDryRunner(t)
 	r.NullRate = 1.0

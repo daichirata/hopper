@@ -20,11 +20,12 @@ func (s *Schema) Table(name string) (*Table, bool) {
 }
 
 type Table struct {
-	Name        string
-	Columns     []*Column
-	PrimaryKeys []string
-	Parent      string
-	ForeignKeys []*ForeignKey
+	Name          string
+	Columns       []*Column
+	PrimaryKeys   []string
+	Parent        string
+	ForeignKeys   []*ForeignKey
+	uniqueColumns map[string]bool
 }
 
 type ForeignKey struct {
@@ -49,6 +50,10 @@ func (t *Table) IsPrimaryKey(name string) bool {
 		}
 	}
 	return false
+}
+
+func (t *Table) IsUnique(name string) bool {
+	return t.uniqueColumns[name]
 }
 
 type Column struct {
@@ -123,6 +128,22 @@ func ParseSchema(uri, ddl string) (*Schema, error) {
 		}
 		if t, ok := s.byName[pathName(at.Name)]; ok {
 			t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk))
+		}
+	}
+	for _, stmt := range stmts {
+		ci, ok := stmt.(*ast.CreateIndex)
+		if !ok || !ci.Unique {
+			continue
+		}
+		t, ok := s.byName[pathName(ci.TableName)]
+		if !ok {
+			continue
+		}
+		if t.uniqueColumns == nil {
+			t.uniqueColumns = map[string]bool{}
+		}
+		for _, k := range ci.Keys {
+			t.uniqueColumns[k.Name.Name] = true
 		}
 	}
 	return s, nil

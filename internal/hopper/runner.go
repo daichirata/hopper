@@ -216,7 +216,7 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 			row[col.Name] = v
 			continue
 		}
-		if gt.table.IsPrimaryKey(col.Name) {
+		if gt.table.IsPrimaryKey(col.Name) || gt.table.IsUnique(col.Name) {
 			v, err := r.gen.Unique(col, index)
 			if err != nil {
 				return nil, err

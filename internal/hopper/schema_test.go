@@ -13,6 +13,7 @@ CREATE TABLE Singers (
   LastName   STRING(1024),
   SingerInfo BYTES(MAX),
   Tags       ARRAY<STRING(MAX)>,
+  Nickname   STRING(MAX),
   FullName   STRING(MAX) AS (COALESCE(FirstName, '') || ' ' || COALESCE(LastName, '')) STORED,
 ) PRIMARY KEY (SingerId);
 
@@ -38,6 +39,8 @@ CREATE TABLE Concerts (
   Venue     STRING(MAX),
   CONSTRAINT FK_ConcertSinger FOREIGN KEY (SingerId) REFERENCES Singers (SingerId),
 ) PRIMARY KEY (ConcertId);
+
+CREATE UNIQUE INDEX UQ_SingerNickname ON Singers (Nickname);
 `
 
 func TestParseSchema(t *testing.T) {
@@ -108,5 +111,9 @@ func TestParseSchema(t *testing.T) {
 	fk := concerts.ForeignKeys[0]
 	if fk.RefTable != "Singers" || len(fk.Columns) != 1 || fk.Columns[0] != "SingerId" || fk.RefColumns[0] != "SingerId" {
 		t.Errorf("Concerts FK = %+v, want SingerId -> Singers.SingerId", fk)
+	}
+
+	if !singers.IsUnique("Nickname") {
+		t.Error("Nickname should be unique (CREATE UNIQUE INDEX)")
 	}
 }

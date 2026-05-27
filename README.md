@@ -69,7 +69,7 @@ Every column is filled automatically; use `--set` to override specific ones.
 
 **Defaults** — when a column has no `--set`:
 
-- **Primary keys** get a collision-free unique value (UUID for STRING, sequential for INT64, …).
+- **Primary keys and unique-index columns** get a collision-free unique value (UUID for STRING, sequential for INT64, …).
 - **Other columns** are inferred from the column name when it matches a gofakeit
   function (`Email`, `FirstName`, `Phone`, …); otherwise a type-appropriate random
   value is used. Add `--no-infer` to disable name inference.
