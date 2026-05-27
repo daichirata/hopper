@@ -113,11 +113,13 @@ Any [gofakeit function](https://github.com/brianvoe/gofakeit#functions) works in
 | `{{ FirstName }}` `{{ Email }}` `{{ Phone }}` `{{ Company }}` | realistic fake data |
 | `{{ Sentence 5 }}`                           | a 5-word sentence                     |
 | `{{ Index }}`                                | row sequence number (0-based)         |
+| `{{ add Index 1 }}`                          | arithmetic: `add` `sub` `mul` `div` `mod` |
 
 `{{ Index }}` is added by hopper (the current row index); everything else is a
-gofakeit function. Templates can be combined (`{{ FirstName }}-{{ Index }}`). The
-rendered string is converted to the column's type, so use a numeric template
-(`{{ Number ... }}`) for numeric columns.
+gofakeit function. Go templates have no infix operators, so use `{{ add Index 1 }}`
+(also `sub` / `mul` / `div` / `mod`) rather than `{{ Index + 1 }}`. Templates can be
+combined (`{{ FirstName }}-{{ Index }}`). The rendered string is converted to the
+column's type, so use a numeric template (`{{ Number ... }}`) for numeric columns.
 
 ### Inferring from column names
 

@@ -40,6 +40,18 @@ func TestGeneratorPatternIndex(t *testing.T) {
 	}
 }
 
+func TestGeneratorPatternArithmetic(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.Int64TypeName}}
+	v, err := g.Pattern(col, "{{ add Index 1 }}", 0)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if v.(int64) != 1 {
+		t.Errorf("add Index 1 at index 0 = %v, want 1", v)
+	}
+}
+
 func TestGeneratorUnique(t *testing.T) {
 	g := newTestGen()
 

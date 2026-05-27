@@ -28,6 +28,21 @@ func (g *Generator) Pattern(col *Column, pattern string, index int) (any, error)
 	opts := &gofakeit.TemplateOptions{
 		Funcs: template.FuncMap{
 			"Index": func() int { return index },
+			"add":   func(a, b int) int { return a + b },
+			"sub":   func(a, b int) int { return a - b },
+			"mul":   func(a, b int) int { return a * b },
+			"div": func(a, b int) int {
+				if b == 0 {
+					return 0
+				}
+				return a / b
+			},
+			"mod": func(a, b int) int {
+				if b == 0 {
+					return 0
+				}
+				return a % b
+			},
 		},
 	}
 	s, err := g.faker.Template(pattern, opts)
