@@ -72,6 +72,7 @@ Generate dummy data and load it into Spanner.
 | `--null-rate F`               | probability (0–1) of leaving a nullable column `NULL` |
 | `--clear`                     | delete existing rows from each target table before loading |
 | `--clear-batch-size N`        | max rows per Delete commit during `--clear` (default `100`; auto-halved on `too-many-mutations`) |
+| `-v`, `--verbose`             | print extra runtime info on stderr (e.g. the seed used) |
 
 ### `hopper scaffold DATABASE`
 
