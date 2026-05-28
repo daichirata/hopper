@@ -55,7 +55,25 @@ When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credential
 
 ## Usage
 
-hopper has three subcommands; pass `--help` to any of them for the built-in usage text.
+```
+❯ bin/hopper help
+hopper is a command-line tool to load dummy data into Google Cloud Spanner.
+
+Usage:
+  hopper [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  run         Generate and load dummy data into Spanner
+  scaffold    Print a config template generated from the database schema
+  version     Display version
+
+Flags:
+  -h, --help   help for hopper
+
+Use "hopper [command] --help" for more information about a command.
+```
 
 ### `hopper run DATABASE`
 
