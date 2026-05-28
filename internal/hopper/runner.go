@@ -30,6 +30,7 @@ type Runner struct {
 	NullRate float64
 	Progress func(table string, inserted, total int)
 	OnClear  func(table string, deleted int64, done bool)
+	OnStart  func(tables []string)
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
@@ -55,6 +56,13 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 	order, err := r.plan(config)
 	if err != nil {
 		return nil, err
+	}
+	if r.OnStart != nil {
+		names := make([]string, len(order))
+		for i, gt := range order {
+			names[i] = gt.table.Name
+		}
+		r.OnStart(names)
 	}
 	if err := r.generate(order); err != nil {
 		return nil, err

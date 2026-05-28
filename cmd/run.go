@@ -61,6 +61,7 @@ var (
 			runner.NullRate = nullRate
 
 			rep := newReporter(os.Stderr)
+			runner.OnStart = rep.prepare
 			runner.OnClear = rep.clear
 			runner.Progress = rep.load
 
