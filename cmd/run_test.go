@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -26,5 +27,26 @@ func TestProgressBar(t *testing.T) {
 		if got := utf8.RuneCountInString(bar); got != progressBarWidth {
 			t.Errorf("progressBar(%v) width = %d, want %d", c.ratio, got, progressBarWidth)
 		}
+	}
+}
+
+func TestReporterLoadNonTTY(t *testing.T) {
+	var buf bytes.Buffer
+	r := &reporter{w: &buf, tty: false}
+	r.load("Albums", 500, 1000)
+	r.load("Albums", 1000, 1000)
+	if got := buf.String(); got != "Albums  1000 rows\n" {
+		t.Errorf("non-tty load output = %q", got)
+	}
+}
+
+func TestReporterClearNonTTY(t *testing.T) {
+	var buf bytes.Buffer
+	r := &reporter{w: &buf, tty: false}
+	r.clear("users", 0, false)
+	r.clear("users", 1000, false)
+	r.clear("users", 1500, true)
+	if got := buf.String(); got != "Cleared users (1500 rows)\n" {
+		t.Errorf("non-tty clear output = %q", got)
 	}
 }

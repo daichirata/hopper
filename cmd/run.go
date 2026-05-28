@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,15 +15,9 @@ var (
 	runCmd = &cobra.Command{
 		Use:   "run DATABASE",
 		Short: "Generate and load dummy data into Spanner",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return fmt.Errorf("must specify 1 argument (DATABASE)")
-			}
-			return nil
-		},
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			databaseURI := args[0]
 
 			configPath, _ := cmd.Flags().GetString("config")
 			tableFlags, _ := cmd.Flags().GetStringArray("table")
@@ -32,29 +25,28 @@ var (
 			seed, _ := cmd.Flags().GetInt64("seed")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noInfer, _ := cmd.Flags().GetBool("no-infer")
-			truncate, _ := cmd.Flags().GetBool("truncate")
+			clear, _ := cmd.Flags().GetBool("clear")
 			nullRate, _ := cmd.Flags().GetFloat64("null-rate")
-
-			if hopper.Scheme(databaseURI) != "spanner" {
-				return fmt.Errorf("DATABASE must be a spanner:// URI")
-			}
 
 			config, err := buildConfig(configPath, tableFlags, setFlags)
 			if err != nil {
 				return err
 			}
 
-			client, err := hopper.NewClient(ctx, databaseURI)
+			uri := args[0]
+			if hopper.Scheme(uri) != "spanner" {
+				return fmt.Errorf("DATABASE must be a spanner:// URI")
+			}
+			client, err := hopper.NewClient(ctx, uri)
 			if err != nil {
 				return err
 			}
 			defer client.Close()
-
 			ddl, err := client.GetDatabaseDDL(ctx)
 			if err != nil {
 				return err
 			}
-			schema, err := hopper.ParseSchema(databaseURI, ddl)
+			schema, err := hopper.ParseSchema(uri, ddl)
 			if err != nil {
 				return err
 			}
@@ -62,41 +54,21 @@ var (
 			if seed == 0 {
 				seed = time.Now().UnixNano()
 			}
-			gen := hopper.NewGenerator(uint64(seed))
-
-			runner := hopper.NewRunner(schema, gen, client)
+			runner := hopper.NewRunner(schema, hopper.NewGenerator(uint64(seed)), client)
 			runner.DryRun = dryRun
 			runner.Infer = !noInfer
-			runner.Truncate = truncate
+			runner.Clear = clear
 			runner.NullRate = nullRate
-			tty := isTerminal(os.Stderr)
-			runner.Progress = func(table string, done, total int) {
-				if !tty {
-					if done >= total {
-						fmt.Fprintf(os.Stderr, "%s  %d rows\n", table, done)
-					}
-					return
-				}
-				ratio := 0.0
-				if total > 0 {
-					ratio = float64(done) / float64(total)
-				}
-				fmt.Fprintf(os.Stderr, "\rLoading %-16s [%s] %3.0f%%  (%d/%d)", table, progressBar(ratio), ratio*100, done, total)
-				if done >= total {
-					fmt.Fprintln(os.Stderr)
-				}
-			}
+
+			rep := newReporter(os.Stderr)
+			runner.OnClear = rep.clear
+			runner.Progress = rep.load
 
 			results, err := runner.Run(ctx, config)
 			if err != nil {
 				return err
 			}
-			for _, res := range results {
-				fmt.Printf("%s\t%d rows\n", res.Table, res.Rows)
-				for _, row := range res.Sample {
-					fmt.Printf("  %v\n", row)
-				}
-			}
+			printResults(results)
 			return nil
 		},
 	}
@@ -124,25 +96,13 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 	return config, nil
 }
 
-const progressBarWidth = 20
-
-func progressBar(ratio float64) string {
-	if ratio < 0 {
-		ratio = 0
+func printResults(results []hopper.Result) {
+	for _, res := range results {
+		fmt.Printf("%s\t%d rows\n", res.Table, res.Rows)
+		for _, row := range res.Sample {
+			fmt.Printf("  %v\n", row)
+		}
 	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	filled := int(ratio * progressBarWidth)
-	return strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
-}
-
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func init() {
@@ -152,7 +112,7 @@ func init() {
 	runCmd.Flags().Int64("seed", 0, "random seed (0 = time-based)")
 	runCmd.Flags().Bool("dry-run", false, "generate rows but do not insert")
 	runCmd.Flags().Bool("no-infer", false, "disable inferring a gofakeit function from unset column names")
-	runCmd.Flags().Bool("truncate", false, "delete existing rows from each target table before loading")
+	runCmd.Flags().Bool("clear", false, "delete existing rows from each target table before loading")
 	runCmd.Flags().Float64("null-rate", 0, "probability (0-1) of setting a nullable, unset column to NULL")
 
 	rootCmd.AddCommand(runCmd)

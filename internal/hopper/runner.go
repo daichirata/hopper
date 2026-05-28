@@ -26,9 +26,10 @@ type Runner struct {
 	client   *Client
 	DryRun   bool
 	Infer    bool
-	Truncate bool
+	Clear    bool
 	NullRate float64
 	Progress func(table string, inserted, total int)
+	OnClear  func(table string, deleted int64, done bool)
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
@@ -60,10 +61,24 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 	}
 
 	live := !r.DryRun && r.client != nil
-	if live && r.Truncate {
+	if live && r.Clear {
 		for i := len(order) - 1; i >= 0; i-- {
-			if err := r.client.Truncate(ctx, order[i].table.Name); err != nil {
-				return nil, fmt.Errorf("truncate %s: %w", order[i].table.Name, err)
+			t := order[i].table
+			if r.OnClear != nil {
+				r.OnClear(t.Name, 0, false)
+			}
+			var lastDeleted int64
+			err := r.client.Clear(ctx, t, func(deleted int64) {
+				lastDeleted = deleted
+				if r.OnClear != nil {
+					r.OnClear(t.Name, deleted, false)
+				}
+			})
+			if err != nil {
+				return nil, fmt.Errorf("clear %s: %w", t.Name, err)
+			}
+			if r.OnClear != nil {
+				r.OnClear(t.Name, lastDeleted, true)
 			}
 		}
 	}

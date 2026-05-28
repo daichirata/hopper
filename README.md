@@ -165,7 +165,7 @@ handy for bumping a count or tweaking one column without editing the file.
 -c, --config string     path to a YAML config file
     --table             total rows as TABLE=N                  (repeatable)
     --set               column template as TABLE.COLUMN=TEMPLATE (repeatable)
-    --truncate          delete existing rows from each table before loading
+    --clear             delete existing rows from each table before loading
     --null-rate float   probability (0-1) of leaving a nullable column NULL
     --no-infer          disable inferring a gofakeit function from column names
     --seed int          random seed (0 = time-based)

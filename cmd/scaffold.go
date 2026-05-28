@@ -14,32 +14,25 @@ var (
 	scaffoldCmd = &cobra.Command{
 		Use:   "scaffold DATABASE",
 		Short: "Print a config template generated from the database schema",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return fmt.Errorf("must specify 1 argument (DATABASE)")
-			}
-			return nil
-		},
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			databaseURI := args[0]
 			tables, _ := cmd.Flags().GetStringArray("table")
 
-			if hopper.Scheme(databaseURI) != "spanner" {
+			uri := args[0]
+			if hopper.Scheme(uri) != "spanner" {
 				return fmt.Errorf("DATABASE must be a spanner:// URI")
 			}
-
-			client, err := hopper.NewClient(ctx, databaseURI)
+			client, err := hopper.NewClient(ctx, uri)
 			if err != nil {
 				return err
 			}
 			defer client.Close()
-
 			ddl, err := client.GetDatabaseDDL(ctx)
 			if err != nil {
 				return err
 			}
-			schema, err := hopper.ParseSchema(databaseURI, ddl)
+			schema, err := hopper.ParseSchema(uri, ddl)
 			if err != nil {
 				return err
 			}
