@@ -96,6 +96,9 @@ func parseTableFlag(s string) (string, int, error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("invalid count in --table %q: %w", s, err)
 	}
+	if n <= 0 {
+		return "", 0, fmt.Errorf("invalid count in --table %q: must be > 0", s)
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", 0, fmt.Errorf("invalid --table %q (empty table name)", s)

@@ -72,8 +72,14 @@ func (g *Generator) Unique(col *Column, index int) (any, error) {
 	}
 	switch col.Type.Base {
 	case ast.StringTypeName:
+		if s, ok := shortUniqueString(col, index); ok {
+			return s, nil
+		}
 		return g.faker.UUID(), nil
 	case ast.BytesTypeName:
+		if s, ok := shortUniqueString(col, index); ok {
+			return []byte(s), nil
+		}
 		return []byte(g.faker.UUID()), nil
 	case ast.Int64TypeName:
 		return int64(index) + 1, nil
@@ -227,6 +233,36 @@ func toSlice(base ast.ScalarTypeName, vals []any) any {
 			out[i] = v.(bool)
 		}
 		return out
+	case ast.NumericTypeName:
+		out := make([]*big.Rat, len(vals))
+		for i, v := range vals {
+			out[i] = v.(*big.Rat)
+		}
+		return out
+	case ast.TimestampTypeName:
+		out := make([]time.Time, len(vals))
+		for i, v := range vals {
+			out[i] = v.(time.Time)
+		}
+		return out
+	case ast.DateTypeName:
+		out := make([]civil.Date, len(vals))
+		for i, v := range vals {
+			out[i] = v.(civil.Date)
+		}
+		return out
+	case ast.JSONTypeName:
+		out := make([]spanner.NullJSON, len(vals))
+		for i, v := range vals {
+			out[i] = v.(spanner.NullJSON)
+		}
+		return out
+	case ast.IntervalTypeName:
+		out := make([]spanner.Interval, len(vals))
+		for i, v := range vals {
+			out[i] = v.(spanner.Interval)
+		}
+		return out
 	default:
 		return vals
 	}
@@ -307,4 +343,15 @@ func stringLen(size int64) int {
 		return int(size)
 	}
 	return defaultStringLen
+}
+
+func shortUniqueString(col *Column, index int) (string, bool) {
+	if col.Type.Size <= 0 || col.Type.Size >= 36 {
+		return "", false
+	}
+	s := strconv.FormatInt(int64(index)+1, 36)
+	if int64(len(s)) > col.Type.Size {
+		return "", false
+	}
+	return s, true
 }

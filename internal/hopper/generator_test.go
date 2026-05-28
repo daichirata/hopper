@@ -1,8 +1,11 @@
 package hopper
 
 import (
+	"math/big"
 	"testing"
+	"time"
 
+	"cloud.google.com/go/civil"
 	"cloud.google.com/go/spanner"
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
@@ -196,6 +199,80 @@ func TestGeneratorCommitTimestamp(t *testing.T) {
 	}
 	if v != spanner.CommitTimestamp {
 		t.Errorf("Default = %v, want spanner.CommitTimestamp", v)
+	}
+}
+
+func TestGeneratorUniqueShortString(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.StringTypeName, Size: 8}}
+	seen := map[string]bool{}
+	for i := 0; i < 100; i++ {
+		v, err := g.Unique(col, i)
+		if err != nil {
+			t.Fatalf("Unique(STRING(8), %d): %v", i, err)
+		}
+		s := v.(string)
+		if int64(len(s)) > col.Type.Size {
+			t.Errorf("Unique(STRING(8), %d) = %q (len %d), exceeds size", i, s, len(s))
+		}
+		if seen[s] {
+			t.Errorf("Unique(STRING(8), %d) = %q, duplicate", i, s)
+		}
+		seen[s] = true
+	}
+}
+
+func TestGeneratorUniqueShortBytes(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.BytesTypeName, Size: 4}}
+	v, err := g.Unique(col, 0)
+	if err != nil {
+		t.Fatalf("Unique: %v", err)
+	}
+	b := v.([]byte)
+	if int64(len(b)) > col.Type.Size {
+		t.Errorf("Unique(BYTES(4)) len = %d, want <= %d", len(b), col.Type.Size)
+	}
+}
+
+func TestGeneratorUniqueFullStringStillUUID(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.StringTypeName}} // size unset
+	v, err := g.Unique(col, 0)
+	if err != nil {
+		t.Fatalf("Unique: %v", err)
+	}
+	if s := v.(string); len(s) != 36 {
+		t.Errorf("Unique(STRING) len = %d, want 36 (uuid)", len(s))
+	}
+}
+
+func TestGeneratorDefaultArrayTypes(t *testing.T) {
+	g := newTestGen()
+	cases := []struct {
+		base ast.ScalarTypeName
+		ok   func(any) bool
+	}{
+		{ast.Int64TypeName, func(v any) bool { _, ok := v.([]int64); return ok }},
+		{ast.StringTypeName, func(v any) bool { _, ok := v.([]string); return ok }},
+		{ast.BytesTypeName, func(v any) bool { _, ok := v.([][]byte); return ok }},
+		{ast.BoolTypeName, func(v any) bool { _, ok := v.([]bool); return ok }},
+		{ast.Float64TypeName, func(v any) bool { _, ok := v.([]float64); return ok }},
+		{ast.NumericTypeName, func(v any) bool { _, ok := v.([]*big.Rat); return ok }},
+		{ast.TimestampTypeName, func(v any) bool { _, ok := v.([]time.Time); return ok }},
+		{ast.DateTypeName, func(v any) bool { _, ok := v.([]civil.Date); return ok }},
+		{ast.JSONTypeName, func(v any) bool { _, ok := v.([]spanner.NullJSON); return ok }},
+		{ast.IntervalTypeName, func(v any) bool { _, ok := v.([]spanner.Interval); return ok }},
+	}
+	for _, c := range cases {
+		col := &Column{Name: "a", Type: ColumnType{Base: c.base, IsArray: true}}
+		v, err := g.Default(col)
+		if err != nil {
+			t.Fatalf("Default(ARRAY<%s>): %v", c.base, err)
+		}
+		if !c.ok(v) {
+			t.Errorf("Default(ARRAY<%s>) type = %T, want strongly-typed slice", c.base, v)
+		}
 	}
 }
 

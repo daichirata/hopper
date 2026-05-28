@@ -52,9 +52,17 @@ var (
 				return err
 			}
 
+			if nullRate < 0 || nullRate > 1 {
+				return fmt.Errorf("--null-rate must be between 0 and 1, got %v", nullRate)
+			}
+			if clearBatch < 1 {
+				return fmt.Errorf("--clear-batch-size must be >= 1, got %d", clearBatch)
+			}
+
 			if seed == 0 {
 				seed = time.Now().UnixNano()
 			}
+			fmt.Fprintf(os.Stderr, "Seed: %d\n", seed)
 			runner := hopper.NewRunner(schema, hopper.NewGenerator(uint64(seed)), client)
 			runner.DryRun = dryRun
 			runner.Infer = !noInfer
