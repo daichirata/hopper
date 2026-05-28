@@ -37,17 +37,17 @@ func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
 	return &Runner{schema: schema, gen: gen, client: client}
 }
 
-type genTable struct {
+type tablePlan struct {
 	table     *Table
 	columns   map[string]string
 	total     int
-	parent    *genTable
+	parent    *tablePlan
 	fkRefs    []*fkRef
 	generated []map[string]any
 }
 
 type fkRef struct {
-	parent     *genTable
+	parent     *tablePlan
 	columns    []string
 	refColumns []string
 }
@@ -114,8 +114,8 @@ func sample(rows []map[string]any, n int) []map[string]any {
 	return rows[:n]
 }
 
-func (r *Runner) plan(config *Config) ([]*genTable, error) {
-	tables := map[string]*genTable{}
+func (r *Runner) plan(config *Config) ([]*tablePlan, error) {
+	tables := map[string]*tablePlan{}
 	for _, s := range config.Tables {
 		t, ok := r.schema.Table(s.Name)
 		if !ok {
@@ -126,7 +126,7 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 				return nil, fmt.Errorf("table %q has no column %q", s.Name, col)
 			}
 		}
-		tables[s.Name] = &genTable{table: t, columns: s.Columns, total: s.Rows}
+		tables[s.Name] = &tablePlan{table: t, columns: s.Columns, total: s.Rows}
 	}
 
 	queue := sortedTableKeys(tables)
@@ -141,7 +141,7 @@ func (r *Runner) plan(config *Config) ([]*genTable, error) {
 			if !ok {
 				return nil, fmt.Errorf("referenced table %q of %q not found in schema", dep, t.Name)
 			}
-			tables[dep] = &genTable{table: dt, total: 1}
+			tables[dep] = &tablePlan{table: dt, total: 1}
 			queue = append(queue, dep)
 		}
 	}
@@ -180,7 +180,7 @@ func dependencies(t *Table) []string {
 	return deps
 }
 
-func (r *Runner) generate(order []*genTable) error {
+func (r *Runner) generate(order []*tablePlan) error {
 	for _, gt := range order {
 		if gt.total <= 0 {
 			return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
@@ -203,7 +203,7 @@ func (r *Runner) generate(order []*genTable) error {
 	return nil
 }
 
-func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) (map[string]any, error) {
+func (r *Runner) generateRow(gt *tablePlan, parentRow map[string]any, index int) (map[string]any, error) {
 	fkValues := map[string]any{}
 	for _, fk := range gt.fkRefs {
 		if len(fk.parent.generated) == 0 {
@@ -267,7 +267,7 @@ func (r *Runner) generateRow(gt *genTable, parentRow map[string]any, index int) 
 	return row, nil
 }
 
-func (r *Runner) insertTable(ctx context.Context, gt *genTable) error {
+func (r *Runner) insertTable(ctx context.Context, gt *tablePlan) error {
 	if len(gt.generated) == 0 {
 		return nil
 	}
@@ -317,8 +317,8 @@ func orderedColumns(t *Table) []string {
 	return cols
 }
 
-func topoSort(tables map[string]*genTable) ([]*genTable, error) {
-	order := make([]*genTable, 0, len(tables))
+func topoSort(tables map[string]*tablePlan) ([]*tablePlan, error) {
+	order := make([]*tablePlan, 0, len(tables))
 	added := make(map[string]bool, len(tables))
 	for len(order) < len(tables) {
 		progress := false
@@ -340,7 +340,7 @@ func topoSort(tables map[string]*genTable) ([]*genTable, error) {
 	return order, nil
 }
 
-func ready(gt *genTable, added map[string]bool) bool {
+func ready(gt *tablePlan, added map[string]bool) bool {
 	if gt.parent != nil && !added[gt.parent.table.Name] {
 		return false
 	}
@@ -352,7 +352,7 @@ func ready(gt *genTable, added map[string]bool) bool {
 	return true
 }
 
-func sortedTableKeys(tables map[string]*genTable) []string {
+func sortedTableKeys(tables map[string]*tablePlan) []string {
 	keys := make([]string, 0, len(tables))
 	for k := range tables {
 		keys = append(keys, k)
