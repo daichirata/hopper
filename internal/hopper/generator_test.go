@@ -276,6 +276,68 @@ func TestGeneratorDefaultArrayTypes(t *testing.T) {
 	}
 }
 
+func TestGeneratorUniqueShortStringOverflow(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.StringTypeName, Size: 1}}
+	// base36(index+1) is single-digit for index 0..34 (i.e. 1..35 -> "1".."z").
+	for i := 0; i < 35; i++ {
+		if _, err := g.Unique(col, i); err != nil {
+			t.Fatalf("Unique(STRING(1), %d) errored unexpectedly: %v", i, err)
+		}
+	}
+	if _, err := g.Unique(col, 35); err == nil {
+		t.Error("Unique(STRING(1), 35) should error because base36(36) = \"10\" no longer fits")
+	}
+}
+
+func TestGeneratorPatternTimestamp(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "CreatedAt", Type: ColumnType{Base: ast.TimestampTypeName}}
+	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if _, ok := v.(time.Time); !ok {
+		t.Errorf("Pattern(TIMESTAMP) type = %T, want time.Time", v)
+	}
+}
+
+func TestGeneratorPatternDate(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Day", Type: ColumnType{Base: ast.DateTypeName}}
+	v, err := g.Pattern(col, "2026-05-28", 0, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if _, ok := v.(civil.Date); !ok {
+		t.Errorf("Pattern(DATE) type = %T, want civil.Date", v)
+	}
+}
+
+func TestGeneratorPatternJSON(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Meta", Type: ColumnType{Base: ast.JSONTypeName}}
+	v, err := g.Pattern(col, `{"k":"v"}`, 0, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if _, ok := v.(spanner.NullJSON); !ok {
+		t.Errorf("Pattern(JSON) type = %T, want spanner.NullJSON", v)
+	}
+}
+
+func TestGeneratorPatternArrayTimestamp(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "TsTags", Type: ColumnType{Base: ast.TimestampTypeName, IsArray: true}}
+	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if _, ok := v.([]time.Time); !ok {
+		t.Errorf("Pattern(ARRAY<TIMESTAMP>) type = %T, want []time.Time", v)
+	}
+}
+
 func typeName(v any) string {
 	switch v.(type) {
 	case int64:

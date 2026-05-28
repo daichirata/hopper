@@ -1,6 +1,7 @@
 package hopper
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -72,12 +73,16 @@ func (g *Generator) Unique(col *Column, index int) (any, error) {
 	}
 	switch col.Type.Base {
 	case ast.StringTypeName:
-		if s, ok := shortUniqueString(col, index); ok {
-			return s, nil
+		if col.Type.Size > 0 && col.Type.Size < 36 {
+			return shortUniqueString(col, index)
 		}
 		return g.faker.UUID(), nil
 	case ast.BytesTypeName:
-		if s, ok := shortUniqueString(col, index); ok {
+		if col.Type.Size > 0 && col.Type.Size < 36 {
+			s, err := shortUniqueString(col, index)
+			if err != nil {
+				return nil, err
+			}
 			return []byte(s), nil
 		}
 		return []byte(g.faker.UUID()), nil
@@ -188,6 +193,16 @@ func coerceScalar(base ast.ScalarTypeName, s string) (any, error) {
 			return nil, fmt.Errorf("cannot parse %q as NUMERIC", s)
 		}
 		return r, nil
+	case ast.TimestampTypeName:
+		return time.Parse(time.RFC3339Nano, strings.TrimSpace(s))
+	case ast.DateTypeName:
+		return civil.ParseDate(strings.TrimSpace(s))
+	case ast.JSONTypeName:
+		var v any
+		if err := json.Unmarshal([]byte(s), &v); err != nil {
+			return nil, fmt.Errorf("cannot parse %q as JSON: %w", s, err)
+		}
+		return spanner.NullJSON{Value: v, Valid: true}, nil
 	case ast.IntervalTypeName:
 		return spanner.ParseInterval(strings.TrimSpace(s))
 	default:
@@ -345,13 +360,10 @@ func stringLen(size int64) int {
 	return defaultStringLen
 }
 
-func shortUniqueString(col *Column, index int) (string, bool) {
-	if col.Type.Size <= 0 || col.Type.Size >= 36 {
-		return "", false
-	}
+func shortUniqueString(col *Column, index int) (string, error) {
 	s := strconv.FormatInt(int64(index)+1, 36)
 	if int64(len(s)) > col.Type.Size {
-		return "", false
+		return "", fmt.Errorf("column %s: cannot fit a unique value for row %d into %s(%d)", col.Name, index, col.Type.Base, col.Type.Size)
 	}
-	return s, true
+	return s, nil
 }

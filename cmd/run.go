@@ -30,6 +30,13 @@ var (
 			nullRate, _ := cmd.Flags().GetFloat64("null-rate")
 			verbose, _ := cmd.Flags().GetBool("verbose")
 
+			if nullRate < 0 || nullRate > 1 {
+				return fmt.Errorf("--null-rate must be between 0 and 1, got %v", nullRate)
+			}
+			if clearBatch < 1 {
+				return fmt.Errorf("--clear-batch-size must be >= 1, got %d", clearBatch)
+			}
+
 			config, err := buildConfig(configPath, tableFlags, setFlags)
 			if err != nil {
 				return err
@@ -51,13 +58,6 @@ var (
 			schema, err := hopper.ParseSchema(uri, ddl)
 			if err != nil {
 				return err
-			}
-
-			if nullRate < 0 || nullRate > 1 {
-				return fmt.Errorf("--null-rate must be between 0 and 1, got %v", nullRate)
-			}
-			if clearBatch < 1 {
-				return fmt.Errorf("--clear-batch-size must be >= 1, got %d", clearBatch)
 			}
 
 			if seed == 0 {
