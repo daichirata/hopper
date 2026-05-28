@@ -140,7 +140,18 @@ Columns are generated in schema order, so reference only columns that come earli
 For anything non-trivial, use a YAML file. Generate a starting point with
 `hopper scaffold DATABASE [--table T]`: every column is listed — name-inferred ones
 are pre-filled, the rest are commented out (`# Column:`) for you to fill in — while
-primary keys and generated columns are skipped. Edit it, then pass it with `--config`:
+primary keys and generated columns are skipped.
+
+```
+# scaffold every table in the schema
+hopper scaffold spanner://projects/p/instances/i/databases/d > hopper.yaml
+
+# scaffold a subset
+hopper scaffold spanner://projects/p/instances/i/databases/d \
+  --table Singers --table Albums > hopper.yaml
+```
+
+Edit the generated `hopper.yaml`, then pass it with `--config`:
 
 ```yaml
 tables:
@@ -154,6 +165,10 @@ tables:
     columns:
       AlbumTitle: "{{ Sentence 3 }}"
       MarketingBudget: "{{ Number 0 1000000 }}"
+```
+
+```
+hopper run spanner://projects/p/instances/i/databases/d --config hopper.yaml
 ```
 
 `--config` can be combined with `--table` / `--set`, which override or extend it —
