@@ -15,9 +15,10 @@ import (
 	"github.com/cloudspannerecosystem/memefish/ast"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
 )
 
-const clearBatchSize = 1000
+const clearBatchSize = 100
 
 func Scheme(uri string) string {
 	u, err := url.Parse(uri)
@@ -87,8 +88,9 @@ func (c *Client) Apply(ctx context.Context, ms []*spanner.Mutation) error {
 
 func (c *Client) Clear(ctx context.Context, t *Table, onProgress func(deleted int64)) error {
 	var deleted int64
+	batch := clearBatchSize
 	for {
-		keys, err := c.readPKBatch(ctx, t, clearBatchSize)
+		keys, err := c.readPKBatch(ctx, t, batch)
 		if err != nil {
 			return err
 		}
@@ -97,6 +99,10 @@ func (c *Client) Clear(ctx context.Context, t *Table, onProgress func(deleted in
 		}
 		ms := []*spanner.Mutation{spanner.Delete(t.Name, spanner.KeySetFromKeys(keys...))}
 		if _, err := c.client.Apply(ctx, ms); err != nil {
+			if isTooManyMutations(err) && batch > 1 {
+				batch = max(batch/2, 1)
+				continue
+			}
 			return err
 		}
 		deleted += int64(len(keys))
@@ -104,6 +110,10 @@ func (c *Client) Clear(ctx context.Context, t *Table, onProgress func(deleted in
 			onProgress(deleted)
 		}
 	}
+}
+
+func isTooManyMutations(err error) bool {
+	return spanner.ErrCode(err) == codes.InvalidArgument && strings.Contains(err.Error(), "too many mutations")
 }
 
 func (c *Client) readPKBatch(ctx context.Context, t *Table, limit int) ([]spanner.Key, error) {
