@@ -62,7 +62,9 @@ var (
 			if seed == 0 {
 				seed = time.Now().UnixNano()
 			}
-			fmt.Fprintf(os.Stderr, "Seed: %d\n", seed)
+			if dryRun {
+				fmt.Fprintf(os.Stderr, "Seed: %d\n", seed)
+			}
 			runner := hopper.NewRunner(schema, hopper.NewGenerator(uint64(seed)), client)
 			runner.DryRun = dryRun
 			runner.Infer = !noInfer
