@@ -300,7 +300,7 @@ func (r *Runner) insertTable(ctx context.Context, gt *tableData) error {
 		for i, c := range cols {
 			vals[i] = row[c]
 		}
-		ms = append(ms, spanner.InsertOrUpdate(gt.table.Name, cols, vals))
+		ms = append(ms, spanner.Insert(gt.table.Name, cols, vals))
 		if len(ms) >= batchRows {
 			if err := flush(); err != nil {
 				return err
