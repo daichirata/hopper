@@ -111,8 +111,14 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 }
 
 func printResults(results []hopper.Result) {
+	width := 0
 	for _, res := range results {
-		fmt.Printf("%s\t%d rows\n", res.Table, res.Rows)
+		if l := len(res.Table); l > width {
+			width = l
+		}
+	}
+	for _, res := range results {
+		fmt.Printf("%-*s  %d rows\n", width, res.Table, res.Rows)
 		for _, row := range res.Sample {
 			fmt.Printf("  %v\n", row)
 		}
