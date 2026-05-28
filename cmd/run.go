@@ -26,6 +26,7 @@ var (
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noInfer, _ := cmd.Flags().GetBool("no-infer")
 			clear, _ := cmd.Flags().GetBool("clear")
+			clearBatch, _ := cmd.Flags().GetInt("clear-batch-size")
 			nullRate, _ := cmd.Flags().GetFloat64("null-rate")
 
 			config, err := buildConfig(configPath, tableFlags, setFlags)
@@ -58,6 +59,7 @@ var (
 			runner.DryRun = dryRun
 			runner.Infer = !noInfer
 			runner.Clear = clear
+			runner.ClearBatchSize = clearBatch
 			runner.NullRate = nullRate
 
 			rep := newReporter(os.Stderr)
@@ -114,6 +116,7 @@ func init() {
 	runCmd.Flags().Bool("dry-run", false, "generate rows but do not insert")
 	runCmd.Flags().Bool("no-infer", false, "disable inferring a gofakeit function from unset column names")
 	runCmd.Flags().Bool("clear", false, "delete existing rows from each target table before loading")
+	runCmd.Flags().Int("clear-batch-size", hopper.DefaultClearBatchSize, "max rows per Delete commit during --clear (auto-halved on too-many-mutations)")
 	runCmd.Flags().Float64("null-rate", 0, "probability (0-1) of setting a nullable, unset column to NULL")
 
 	rootCmd.AddCommand(runCmd)

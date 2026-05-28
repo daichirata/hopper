@@ -15,7 +15,7 @@ func newDryRunner(t *testing.T) *Runner {
 	return NewRunner(schema, NewGenerator(1), nil)
 }
 
-func tablePlans(t *testing.T, r *Runner, cfg *Config) map[string]*tablePlan {
+func tableDatas(t *testing.T, r *Runner, cfg *Config) map[string]*tableData {
 	t.Helper()
 	order, err := r.plan(cfg)
 	if err != nil {
@@ -24,7 +24,7 @@ func tablePlans(t *testing.T, r *Runner, cfg *Config) map[string]*tablePlan {
 	if err := r.generate(order); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	m := map[string]*tablePlan{}
+	m := map[string]*tableData{}
 	for _, gt := range order {
 		m[gt.table.Name] = gt
 	}
@@ -38,7 +38,7 @@ func TestRunnerAncestorCompletion(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if got := len(m["Singers"].generated); got != 1 {
 		t.Errorf("Singers rows = %d, want 1 (auto-completed parent)", got)
 	}
@@ -61,7 +61,7 @@ func TestRunnerRoundRobinDistribution(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if got := len(m["Singers"].generated); got != 10 {
 		t.Errorf("Singers rows = %d, want 10", got)
 	}
@@ -93,7 +93,7 @@ func TestRunnerColumnTemplateAndUniquePK(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	rows := m["Albums"].generated
 	if len(rows) != 50 {
 		t.Fatalf("Albums rows = %d, want 50", len(rows))
@@ -116,7 +116,7 @@ func TestRunnerColumnTemplateAndUniquePK(t *testing.T) {
 func TestRunnerExcludesGeneratedColumn(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, _ := ConfigFromFlags([]string{"Singers=5"}, nil)
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	for _, row := range m["Singers"].generated {
 		if _, ok := row["FullName"]; ok {
 			t.Error("generated column FullName should not be populated")
@@ -149,7 +149,7 @@ func TestRunnerForeignKey(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if got := len(m["Concerts"].generated); got != 20 {
 		t.Errorf("Concerts rows = %d, want 20", got)
 	}
@@ -172,7 +172,7 @@ func TestRunnerForeignKeyAutoComplete(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, _ := ConfigFromFlags([]string{"Concerts=20"}, nil)
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if _, ok := m["Singers"]; !ok {
 		t.Fatal("Singers should be auto-completed via the foreign key")
 	}
@@ -198,7 +198,7 @@ func TestRunnerThreeLevelInterleave(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if got := len(m["Songs"].generated); got != 24 {
 		t.Errorf("Songs rows = %d, want 24", got)
 	}
@@ -228,7 +228,7 @@ func TestRunnerThreeLevelAutoComplete(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, _ := ConfigFromFlags([]string{"Songs=24"}, nil)
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	if got := len(m["Singers"].generated); got != 1 {
 		t.Errorf("auto-completed Singers = %d, want 1", got)
 	}
@@ -244,7 +244,7 @@ func TestRunnerUniqueIndex(t *testing.T) {
 	r := newDryRunner(t)
 	cfg, _ := ConfigFromFlags([]string{"Singers=50"}, nil)
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	seen := map[any]bool{}
 	for _, row := range m["Singers"].generated {
 		nick := row["Nickname"]
@@ -262,7 +262,7 @@ func TestRunnerSetOverridesUnique(t *testing.T) {
 		t.Fatalf("ConfigFromFlags: %v", err)
 	}
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	for i, row := range m["Singers"].generated {
 		want := fmt.Sprintf("nick-%d", i)
 		if row["Nickname"] != want {
@@ -276,7 +276,7 @@ func TestRunnerNullRate(t *testing.T) {
 	r.NullRate = 1.0
 	cfg, _ := ConfigFromFlags([]string{"Singers=10"}, nil)
 
-	m := tablePlans(t, r, cfg)
+	m := tableDatas(t, r, cfg)
 	for _, row := range m["Singers"].generated {
 		if row["FirstName"] != nil {
 			t.Errorf("FirstName = %v, want NULL with null-rate 1.0", row["FirstName"])

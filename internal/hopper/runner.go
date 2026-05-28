@@ -8,11 +8,11 @@ import (
 	"cloud.google.com/go/spanner"
 )
 
-const maxCellsPerCommit = 20000
-
-const maxRowsPerCommit = 1000
-
-const sampleRows = 3
+const (
+	maxCellsPerCommit = 20000
+	maxRowsPerCommit  = 1000
+	sampleRows        = 3
+)
 
 type Result struct {
 	Table  string
@@ -21,33 +21,34 @@ type Result struct {
 }
 
 type Runner struct {
-	schema   *Schema
-	gen      *Generator
-	client   *Client
-	DryRun   bool
-	Infer    bool
-	Clear    bool
-	NullRate float64
-	Progress func(table string, inserted, total int)
-	OnClear  func(table string, deleted int64, done bool)
-	OnStart  func(tables []string)
+	schema         *Schema
+	gen            *Generator
+	client         *Client
+	DryRun         bool
+	Infer          bool
+	Clear          bool
+	NullRate       float64
+	ClearBatchSize int
+	Progress       func(table string, inserted, total int)
+	OnClear        func(table string, deleted int64, done bool)
+	OnStart        func(tables []string)
 }
 
 func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
 	return &Runner{schema: schema, gen: gen, client: client}
 }
 
-type tablePlan struct {
+type tableData struct {
 	table     *Table
 	columns   map[string]string
 	total     int
-	parent    *tablePlan
+	parent    *tableData
 	fkRefs    []*fkRef
 	generated []map[string]any
 }
 
 type fkRef struct {
-	parent     *tablePlan
+	parent     *tableData
 	columns    []string
 	refColumns []string
 }
@@ -64,6 +65,7 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 		}
 		r.OnStart(names)
 	}
+
 	if err := r.generate(order); err != nil {
 		return nil, err
 	}
@@ -75,8 +77,9 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 			if r.OnClear != nil {
 				r.OnClear(t.Name, 0, false)
 			}
+
 			var lastDeleted int64
-			err := r.client.Clear(ctx, t, func(deleted int64) {
+			err := r.client.Clear(ctx, t, r.ClearBatchSize, func(deleted int64) {
 				lastDeleted = deleted
 				if r.OnClear != nil {
 					r.OnClear(t.Name, deleted, false)
@@ -85,6 +88,7 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 			if err != nil {
 				return nil, fmt.Errorf("clear %s: %w", t.Name, err)
 			}
+
 			if r.OnClear != nil {
 				r.OnClear(t.Name, lastDeleted, true)
 			}
@@ -114,8 +118,8 @@ func sample(rows []map[string]any, n int) []map[string]any {
 	return rows[:n]
 }
 
-func (r *Runner) plan(config *Config) ([]*tablePlan, error) {
-	tables := map[string]*tablePlan{}
+func (r *Runner) plan(config *Config) ([]*tableData, error) {
+	tables := map[string]*tableData{}
 	for _, s := range config.Tables {
 		t, ok := r.schema.Table(s.Name)
 		if !ok {
@@ -126,7 +130,7 @@ func (r *Runner) plan(config *Config) ([]*tablePlan, error) {
 				return nil, fmt.Errorf("table %q has no column %q", s.Name, col)
 			}
 		}
-		tables[s.Name] = &tablePlan{table: t, columns: s.Columns, total: s.Rows}
+		tables[s.Name] = &tableData{table: t, columns: s.Columns, total: s.Rows}
 	}
 
 	queue := sortedTableKeys(tables)
@@ -141,7 +145,7 @@ func (r *Runner) plan(config *Config) ([]*tablePlan, error) {
 			if !ok {
 				return nil, fmt.Errorf("referenced table %q of %q not found in schema", dep, t.Name)
 			}
-			tables[dep] = &tablePlan{table: dt, total: 1}
+			tables[dep] = &tableData{table: dt, total: 1}
 			queue = append(queue, dep)
 		}
 	}
@@ -180,7 +184,7 @@ func dependencies(t *Table) []string {
 	return deps
 }
 
-func (r *Runner) generate(order []*tablePlan) error {
+func (r *Runner) generate(order []*tableData) error {
 	for _, gt := range order {
 		if gt.total <= 0 {
 			return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
@@ -203,7 +207,7 @@ func (r *Runner) generate(order []*tablePlan) error {
 	return nil
 }
 
-func (r *Runner) generateRow(gt *tablePlan, parentRow map[string]any, index int) (map[string]any, error) {
+func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int) (map[string]any, error) {
 	fkValues := map[string]any{}
 	for _, fk := range gt.fkRefs {
 		if len(fk.parent.generated) == 0 {
@@ -267,7 +271,7 @@ func (r *Runner) generateRow(gt *tablePlan, parentRow map[string]any, index int)
 	return row, nil
 }
 
-func (r *Runner) insertTable(ctx context.Context, gt *tablePlan) error {
+func (r *Runner) insertTable(ctx context.Context, gt *tableData) error {
 	if len(gt.generated) == 0 {
 		return nil
 	}
@@ -317,8 +321,8 @@ func orderedColumns(t *Table) []string {
 	return cols
 }
 
-func topoSort(tables map[string]*tablePlan) ([]*tablePlan, error) {
-	order := make([]*tablePlan, 0, len(tables))
+func topoSort(tables map[string]*tableData) ([]*tableData, error) {
+	order := make([]*tableData, 0, len(tables))
 	added := make(map[string]bool, len(tables))
 	for len(order) < len(tables) {
 		progress := false
@@ -340,7 +344,7 @@ func topoSort(tables map[string]*tablePlan) ([]*tablePlan, error) {
 	return order, nil
 }
 
-func ready(gt *tablePlan, added map[string]bool) bool {
+func ready(gt *tableData, added map[string]bool) bool {
 	if gt.parent != nil && !added[gt.parent.table.Name] {
 		return false
 	}
@@ -352,7 +356,7 @@ func ready(gt *tablePlan, added map[string]bool) bool {
 	return true
 }
 
-func sortedTableKeys(tables map[string]*tablePlan) []string {
+func sortedTableKeys(tables map[string]*tableData) []string {
 	keys := make([]string, 0, len(tables))
 	for k := range tables {
 		keys = append(keys, k)

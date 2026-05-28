@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const clearBatchSize = 100
+const DefaultClearBatchSize = 100
 
 func Scheme(uri string) string {
 	u, err := url.Parse(uri)
@@ -86,9 +86,11 @@ func (c *Client) Apply(ctx context.Context, ms []*spanner.Mutation) error {
 	return err
 }
 
-func (c *Client) Clear(ctx context.Context, t *Table, onProgress func(deleted int64)) error {
+func (c *Client) Clear(ctx context.Context, t *Table, batch int, onProgress func(deleted int64)) error {
+	if batch <= 0 {
+		batch = DefaultClearBatchSize
+	}
 	var deleted int64
-	batch := clearBatchSize
 	for {
 		keys, err := c.readPKBatch(ctx, t, batch)
 		if err != nil {
