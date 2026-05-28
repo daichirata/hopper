@@ -59,7 +59,7 @@ hopper has three subcommands; pass `--help` to any of them for the built-in usag
 
 ### `hopper run DATABASE`
 
-Generate dummy data and load it into Spanner. While loading, a per-table progress bar is shown on stderr (`Loading Albums [████████░░░░░░░░░░░░] 40% (400/1000)`); when stderr is not a terminal, one summary line per table is printed instead.
+Generate dummy data and load it into Spanner.
 
 | Flag | Description |
 |------|-------------|
