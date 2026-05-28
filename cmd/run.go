@@ -28,6 +28,7 @@ var (
 			clear, _ := cmd.Flags().GetBool("clear")
 			clearBatch, _ := cmd.Flags().GetInt("clear-batch-size")
 			nullRate, _ := cmd.Flags().GetFloat64("null-rate")
+			verbose, _ := cmd.Flags().GetBool("verbose")
 
 			config, err := buildConfig(configPath, tableFlags, setFlags)
 			if err != nil {
@@ -62,7 +63,7 @@ var (
 			if seed == 0 {
 				seed = time.Now().UnixNano()
 			}
-			if dryRun {
+			if verbose {
 				fmt.Fprintf(os.Stderr, "Seed: %d\n", seed)
 			}
 			runner := hopper.NewRunner(schema, hopper.NewGenerator(uint64(seed)), client)
@@ -128,6 +129,7 @@ func init() {
 	runCmd.Flags().Bool("clear", false, "delete existing rows from each target table before loading")
 	runCmd.Flags().Int("clear-batch-size", hopper.DefaultClearBatchSize, "max rows per Delete commit during --clear (auto-halved on too-many-mutations)")
 	runCmd.Flags().Float64("null-rate", 0, "probability (0-1) of setting a nullable, unset column to NULL")
+	runCmd.Flags().BoolP("verbose", "v", false, "print extra runtime information on stderr (e.g. the seed)")
 
 	rootCmd.AddCommand(runCmd)
 }
