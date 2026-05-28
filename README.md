@@ -53,18 +53,37 @@ spanner://projects/{projectId}/instances/{instanceId}/databases/{databaseName}?c
 
 When `SPANNER_EMULATOR_HOST` is set, hopper talks to the emulator (no credentials needed).
 
-## Commands
+## Usage
 
-| Command | Description |
-|---------|-------------|
-| `hopper run DATABASE`      | generate dummy data and load it into Spanner |
-| `hopper scaffold DATABASE` | print a starter config (YAML) from the schema |
-| `hopper version`           | print the version |
+hopper has three subcommands; pass `--help` to any of them for the built-in usage text.
 
-The rest of this README covers `run`, the main command. Run `hopper <command> --help`
-for the full set of flags. While loading, `run` shows a per-table progress bar on
-stderr (`Loading Albums [████████░░░░░░░░░░░░] 40% (400/1000)`); when stderr is not a
-terminal it prints one summary line per table instead.
+### `hopper run DATABASE`
+
+Generate dummy data and load it into Spanner. While loading, a per-table progress bar is shown on stderr (`Loading Albums [████████░░░░░░░░░░░░] 40% (400/1000)`); when stderr is not a terminal, one summary line per table is printed instead.
+
+| Flag | Description |
+|------|-------------|
+| `-c`, `--config FILE`         | path to a YAML config file |
+| `--table TABLE=N`             | total rows per table (repeatable) |
+| `--set TABLE.COL=TEMPLATE`    | gofakeit template per column (repeatable) |
+| `--seed N`                    | random seed (`0` = time-based) |
+| `--dry-run`                   | generate rows but do not insert (prints a few sample rows) |
+| `--no-infer`                  | disable inferring a gofakeit function from column names |
+| `--null-rate F`               | probability (0–1) of leaving a nullable column `NULL` |
+| `--clear`                     | delete existing rows from each target table before loading |
+| `--clear-batch-size N`        | max rows per Delete commit during `--clear` (default `100`; auto-halved on `too-many-mutations`) |
+
+### `hopper scaffold DATABASE`
+
+Print a YAML config template generated from the database schema. Columns whose name matches a gofakeit function are pre-filled; the rest are commented out for you to fill in.
+
+| Flag | Description |
+|------|-------------|
+| `--table T`                   | table to include (repeatable; default: all tables) |
+
+### `hopper version`
+
+Print the version.
 
 ## Tables and row counts
 
@@ -173,19 +192,6 @@ hopper run spanner://projects/p/instances/i/databases/d --config hopper.yaml
 
 `--config` can be combined with `--table` / `--set`, which override or extend it —
 handy for bumping a count or tweaking one column without editing the file.
-
-## Flags
-
-```
--c, --config string     path to a YAML config file
-    --table             total rows as TABLE=N                  (repeatable)
-    --set               column template as TABLE.COLUMN=TEMPLATE (repeatable)
-    --clear             delete existing rows from each table before loading
-    --null-rate float   probability (0-1) of leaving a nullable column NULL
-    --no-infer          disable inferring a gofakeit function from column names
-    --seed int          random seed (0 = time-based)
-    --dry-run           generate rows but do not insert (prints a few sample rows)
-```
 
 ## Development
 
