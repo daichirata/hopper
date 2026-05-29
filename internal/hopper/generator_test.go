@@ -421,6 +421,70 @@ func TestGeneratorPatternRefDistinct(t *testing.T) {
 	}
 }
 
+func TestGeneratorPatternRefMissingColumn(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{{"user_id": "u1"}})
+	if _, err := g.Pattern(col, `{{ Ref "users" "missing" }}`, 0, nil, refs); err == nil {
+		t.Fatal("expected error when referenced column is missing")
+	}
+}
+
+func TestGeneratorPatternRefDistinctMissingColumn(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{{"user_id": "u1"}})
+	row := map[string]any{"scope": "s1"}
+	if _, err := g.Pattern(col, `{{ RefDistinct "users" "missing" "scope" }}`, 0, row, refs); err == nil {
+		t.Fatal("expected error when referenced column is missing in RefDistinct")
+	}
+}
+
+// Same scope value with two different columns must not share the used set:
+// exhausting the "id" pool must not block picks from the "name" pool.
+func TestGeneratorPatternRefDistinctPerColumnUsedSet(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{
+		{"id": "u1", "name": "Alice"},
+		{"id": "u2", "name": "Bob"},
+	})
+	row := map[string]any{"scope": "s1"}
+
+	seenIds := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		v, err := g.Pattern(col, `{{ RefDistinct "users" "id" "scope" }}`, i, row, refs)
+		if err != nil {
+			t.Fatalf("id pick %d: %v", i, err)
+		}
+		seenIds[v.(string)] = true
+	}
+	if len(seenIds) != 2 {
+		t.Errorf("expected both ids picked, got %v", seenIds)
+	}
+	// "id" pool is now exhausted under scope=s1; this would fail.
+	if _, err := g.Pattern(col, `{{ RefDistinct "users" "id" "scope" }}`, 2, row, refs); err == nil {
+		t.Fatal("expected id pool exhaustion under scope=s1")
+	}
+
+	// But picks from the "name" column under the same scope must still work,
+	// because the used set is keyed per (table, column, scope, scopeVal).
+	seenNames := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		v, err := g.Pattern(col, `{{ RefDistinct "users" "name" "scope" }}`, i, row, refs)
+		if err != nil {
+			t.Fatalf("name pick %d (should not share used set with id): %v", i, err)
+		}
+		seenNames[v.(string)] = true
+	}
+	if len(seenNames) != 2 {
+		t.Errorf("expected both names picked, got %v", seenNames)
+	}
+}
+
 func typeName(v any) string {
 	switch v.(type) {
 	case int64:

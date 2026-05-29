@@ -84,6 +84,9 @@ func (g *Generator) Pattern(col *Column, pattern string, index int, row map[stri
 			if err != nil {
 				return nil, err
 			}
+			if _, ok := rows[0][column]; !ok {
+				return nil, fmt.Errorf("Ref(%q, %q): column %q not found in %q rows", table, column, column, table)
+			}
 			pick := rows[g.faker.IntN(len(rows))]
 			return pick[column], nil
 		},
@@ -92,11 +95,14 @@ func (g *Generator) Pattern(col *Column, pattern string, index int, row map[stri
 			if err != nil {
 				return nil, err
 			}
+			if _, ok := rows[0][column]; !ok {
+				return nil, fmt.Errorf("RefDistinct(%q, %q, %q): column %q not found in %q rows", table, column, scope, column, table)
+			}
 			scopeVal, ok := row[scope]
 			if !ok {
 				return nil, fmt.Errorf("RefDistinct(%q, %q, %q): current row has no column %q", table, column, scope, scope)
 			}
-			scopeKey := fmt.Sprintf("%s|%s|%v", table, scope, scopeVal)
+			scopeKey := fmt.Sprintf("%s|%s|%s|%v", table, column, scope, scopeVal)
 			used := refs.used[scopeKey]
 			if used == nil {
 				used = map[string]struct{}{}

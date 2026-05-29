@@ -185,11 +185,14 @@ a real Singer.
 `{{ RefDistinct "<table>" "<column>" "<scope>" }}` adds two guarantees: (1) the picked value
 is never equal to the current row's `<scope>` value (no self-reference), and (2) within rows
 sharing the same `<scope>` value, picked values are not reused. If the pool is exhausted,
-hopper fails with a clear error. For example, imagine a `Collaborations` table that links
-each `Album` to a guest `Singer`, with `(AlbumId, GuestSingerId)` constrained `UNIQUE` and
-the convention that the Album's own primary Singer must not appear as a Guest. Then
-`--set 'Collaborations.GuestSingerId={{ RefDistinct "Singers" "SingerId" "AlbumId" }}'`
-fills the column while honoring both rules automatically.
+hopper fails with a clear error. For example, imagine a `Collaborations` table interleaved
+in `Singers`, where each row records that one Singer (the parent, `SingerId`) collaborated
+with another (`GuestSingerId`), with `(SingerId, GuestSingerId)` constrained `UNIQUE` and a
+Singer not allowed to list themself as a collaborator. Then
+`--set 'Collaborations.GuestSingerId={{ RefDistinct "Singers" "SingerId" "SingerId" }}'`
+fills it correctly: the picked `SingerId` is compared against the current row's own
+`SingerId` (no self-collaboration), and within the same parent Singer no `GuestSingerId` is
+reused.
 
 ## Configuration file
 
