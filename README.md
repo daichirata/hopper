@@ -162,6 +162,8 @@ Every column is filled automatically; use `--set` to override specific ones.
 | `{{ Index }}`                                  | row sequence number (0-based)             |
 | `{{ add Index 1 }}`                            | arithmetic: `add` `sub` `mul` `div` `mod` |
 | `{{ Col "FirstName" }}`                        | value of another column in the same row   |
+| `{{ Ref "<table>" "<column>" }}`               | random value picked from another generated table |
+| `{{ RefDistinct "<table>" "<column>" "<scope>" }}` | same, but unique per scope + no self-reference |
 
 `{{ Index }}`, the arithmetic helpers, and `{{ Col }}` are hopper additions; everything
 else is a gofakeit function (any [gofakeit function](https://github.com/brianvoe/gofakeit#functions)
@@ -172,6 +174,16 @@ columns get a single templated element (or a few random ones by default).
 `{{ Col "OtherColumn" }}` reads a column already generated for the same row, so you can
 derive one value from another (`--set 'Singers.Nickname={{ Col "FirstName" }}-{{ Index }}'`).
 Columns are generated in schema order, so reference only columns that come earlier.
+
+`{{ Ref "<table>" "<column>" }}` picks a random row from a **previously generated** table and
+returns the value of its `<column>`. Useful for filling logical references that the schema
+doesn't express as `FOREIGN KEY` (so hopper can't auto-resolve them).
+
+`{{ RefDistinct "<table>" "<column>" "<scope>" }}` adds two guarantees: (1) the picked value
+is never equal to the current row's `<scope>` value (no self-reference), and (2) within rows
+sharing the same `<scope>` value, picked values are not reused. If the pool is exhausted,
+hopper fails with a clear error. Use this when the referencing column has a `UNIQUE` constraint
+and self-application is meaningless.
 
 ## Configuration file
 

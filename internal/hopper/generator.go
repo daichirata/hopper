@@ -43,7 +43,34 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-func (g *Generator) Pattern(col *Column, pattern string, index int, row map[string]any) (any, error) {
+type refRegistry struct {
+	rows map[string][]map[string]any
+	used map[string]map[string]struct{}
+}
+
+func newRefRegistry() *refRegistry {
+	return &refRegistry{
+		rows: map[string][]map[string]any{},
+		used: map[string]map[string]struct{}{},
+	}
+}
+
+func (r *refRegistry) add(table string, rows []map[string]any) {
+	r.rows[table] = rows
+}
+
+func refRows(refs *refRegistry, table, column string) ([]map[string]any, error) {
+	if refs == nil {
+		return nil, fmt.Errorf("Ref/RefDistinct(%q, %q): refs not initialized", table, column)
+	}
+	rows, ok := refs.rows[table]
+	if !ok || len(rows) == 0 {
+		return nil, fmt.Errorf("Ref/RefDistinct(%q, %q): table %q has no generated rows yet (referenced table must be loaded before the referencing one)", table, column, table)
+	}
+	return rows, nil
+}
+
+func (g *Generator) Pattern(col *Column, pattern string, index int, row map[string]any, refs *refRegistry) (any, error) {
 	funcs := template.FuncMap{
 		"Index": func() int { return index },
 		"Col": func(name string) any {
@@ -51,6 +78,57 @@ func (g *Generator) Pattern(col *Column, pattern string, index int, row map[stri
 				return v
 			}
 			return ""
+		},
+		"Ref": func(table, column string) (any, error) {
+			rows, err := refRows(refs, table, column)
+			if err != nil {
+				return nil, err
+			}
+			pick := rows[g.faker.IntN(len(rows))]
+			return pick[column], nil
+		},
+		"RefDistinct": func(table, column, scope string) (any, error) {
+			rows, err := refRows(refs, table, column)
+			if err != nil {
+				return nil, err
+			}
+			scopeVal, ok := row[scope]
+			if !ok {
+				return nil, fmt.Errorf("RefDistinct(%q, %q, %q): current row has no column %q", table, column, scope, scope)
+			}
+			scopeKey := fmt.Sprintf("%s|%s|%v", table, scope, scopeVal)
+			used := refs.used[scopeKey]
+			if used == nil {
+				used = map[string]struct{}{}
+				refs.used[scopeKey] = used
+			}
+			scopeStr := fmt.Sprintf("%v", scopeVal)
+			accept := func(pick map[string]any) (any, bool) {
+				v, ok := pick[column]
+				if !ok {
+					return nil, false
+				}
+				vStr := fmt.Sprintf("%v", v)
+				if vStr == scopeStr {
+					return nil, false
+				}
+				if _, exists := used[vStr]; exists {
+					return nil, false
+				}
+				used[vStr] = struct{}{}
+				return v, true
+			}
+			for attempt := 0; attempt < 8; attempt++ {
+				if v, ok := accept(rows[g.faker.IntN(len(rows))]); ok {
+					return v, nil
+				}
+			}
+			for _, pick := range rows {
+				if v, ok := accept(pick); ok {
+					return v, nil
+				}
+			}
+			return nil, fmt.Errorf("RefDistinct(%q, %q, %q): exhausted available values for %s=%v (need more rows in %q or fewer in the referencing table)", table, column, scope, scope, scopeVal, table)
 		},
 	}
 	for name, fn := range templateFuncs {
