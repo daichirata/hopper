@@ -177,13 +177,19 @@ Columns are generated in schema order, so reference only columns that come earli
 
 `{{ Ref "<table>" "<column>" }}` picks a random row from a **previously generated** table and
 returns the value of its `<column>`. Useful for filling logical references that the schema
-doesn't express as `FOREIGN KEY` (so hopper can't auto-resolve them).
+doesn't express as `FOREIGN KEY` (so hopper can't auto-resolve them). For example, imagine a
+`Reviews` table whose `ReviewerSingerId` column points at `Singers.SingerId` only logically:
+`--set 'Reviews.ReviewerSingerId={{ Ref "Singers" "SingerId" }}'` keeps each row pointing at
+a real Singer.
 
 `{{ RefDistinct "<table>" "<column>" "<scope>" }}` adds two guarantees: (1) the picked value
 is never equal to the current row's `<scope>` value (no self-reference), and (2) within rows
 sharing the same `<scope>` value, picked values are not reused. If the pool is exhausted,
-hopper fails with a clear error. Use this when the referencing column has a `UNIQUE` constraint
-and self-application is meaningless.
+hopper fails with a clear error. For example, imagine a `Collaborations` table that links
+each `Album` to a guest `Singer`, with `(AlbumId, GuestSingerId)` constrained `UNIQUE` and
+the convention that the Album's own primary Singer must not appear as a Guest. Then
+`--set 'Collaborations.GuestSingerId={{ RefDistinct "Singers" "SingerId" "AlbumId" }}'`
+fills the column while honoring both rules automatically.
 
 ## Configuration file
 
