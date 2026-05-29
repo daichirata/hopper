@@ -92,7 +92,10 @@ func TestE2EEmulator(t *testing.T) {
 	runner.Clear = true
 	runner.NullRate = 0.3
 
-	cfg, err := ConfigFromFlags([]string{"Singers=10", "Albums=30", "Concerts=15"}, nil)
+	cfg, err := ConfigFromFlags(
+		[]string{"Singers=10", "Albums=30", "Concerts=15"},
+		[]string{`Concerts.Venue={{ Ref "Singers" "FirstName" }}`},
+	)
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}

@@ -18,7 +18,7 @@ func TestGeneratorPatternNumber(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "MarketingBudget", Type: ColumnType{Base: ast.Int64TypeName}}
 	for i := 0; i < 100; i++ {
-		v, err := g.Pattern(col, "{{ Number 0 10 }}", i, nil)
+		v, err := g.Pattern(col, "{{ Number 0 10 }}", i, nil, nil)
 		if err != nil {
 			t.Fatalf("Pattern: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestGeneratorPatternNumber(t *testing.T) {
 func TestGeneratorPatternIndex(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Name", Type: ColumnType{Base: ast.StringTypeName}}
-	v, err := g.Pattern(col, "user-{{ Index }}", 7, nil)
+	v, err := g.Pattern(col, "user-{{ Index }}", 7, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestGeneratorPatternIndex(t *testing.T) {
 func TestGeneratorPatternArithmetic(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Id", Type: ColumnType{Base: ast.Int64TypeName}}
-	v, err := g.Pattern(col, "{{ add Index 1 }}", 0, nil)
+	v, err := g.Pattern(col, "{{ add Index 1 }}", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestGeneratorPatternFunctions(t *testing.T) {
 		`{{ FirstName }}-{{ Index }}`,
 	}
 	for _, p := range patterns {
-		if _, err := g.Pattern(col, p, 0, nil); err != nil {
+		if _, err := g.Pattern(col, p, 0, nil, nil); err != nil {
 			t.Errorf("Pattern(%q): %v", p, err)
 		}
 	}
@@ -143,7 +143,7 @@ func TestGeneratorGuess(t *testing.T) {
 func TestGeneratorArrayPattern(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Tags", Type: ColumnType{Base: ast.StringTypeName, IsArray: true}}
-	v, err := g.Pattern(col, "{{ Word }}", 0, nil)
+	v, err := g.Pattern(col, "{{ Word }}", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestGeneratorInterval(t *testing.T) {
 		t.Errorf("Default type = %T, want spanner.Interval", v)
 	}
 
-	pv, err := g.Pattern(col, "P1Y2M3D", 0, nil)
+	pv, err := g.Pattern(col, "P1Y2M3D", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestGeneratorPatternColRef(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Email", Type: ColumnType{Base: ast.StringTypeName}}
 	row := map[string]any{"FirstName": "ada"}
-	v, err := g.Pattern(col, `{{ Col "FirstName" }}@example.com`, 0, row)
+	v, err := g.Pattern(col, `{{ Col "FirstName" }}@example.com`, 0, row, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestGeneratorUniqueShortStringOverflow(t *testing.T) {
 func TestGeneratorPatternTimestamp(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "CreatedAt", Type: ColumnType{Base: ast.TimestampTypeName}}
-	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil)
+	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestGeneratorPatternTimestamp(t *testing.T) {
 func TestGeneratorPatternDate(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Day", Type: ColumnType{Base: ast.DateTypeName}}
-	v, err := g.Pattern(col, "2026-05-28", 0, nil)
+	v, err := g.Pattern(col, "2026-05-28", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestGeneratorPatternDate(t *testing.T) {
 func TestGeneratorPatternJSON(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "Meta", Type: ColumnType{Base: ast.JSONTypeName}}
-	v, err := g.Pattern(col, `{"k":"v"}`, 0, nil)
+	v, err := g.Pattern(col, `{"k":"v"}`, 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
@@ -329,12 +329,159 @@ func TestGeneratorPatternJSON(t *testing.T) {
 func TestGeneratorPatternArrayTimestamp(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "TsTags", Type: ColumnType{Base: ast.TimestampTypeName, IsArray: true}}
-	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil)
+	v, err := g.Pattern(col, "2026-05-28T00:00:00Z", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("Pattern: %v", err)
 	}
 	if _, ok := v.([]time.Time); !ok {
 		t.Errorf("Pattern(ARRAY<TIMESTAMP>) type = %T, want []time.Time", v)
+	}
+}
+
+func TestGeneratorPatternRef(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "from_user_id", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{
+		{"user_id": "user-1"},
+		{"user_id": "user-2"},
+		{"user_id": "user-3"},
+	})
+	got := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		v, err := g.Pattern(col, `{{ Ref "users" "user_id" }}`, i, nil, refs)
+		if err != nil {
+			t.Fatalf("Pattern: %v", err)
+		}
+		got[v.(string)] = true
+	}
+	for _, want := range []string{"user-1", "user-2", "user-3"} {
+		if !got[want] {
+			t.Errorf("Ref never picked %q after 50 attempts (got %v)", want, got)
+		}
+	}
+}
+
+func TestGeneratorPatternRefMissingTable(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "from_user_id", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	_, err := g.Pattern(col, `{{ Ref "users" "user_id" }}`, 0, nil, refs)
+	if err == nil {
+		t.Fatal("expected error when ref table has no generated rows")
+	}
+}
+
+func TestGeneratorPatternRefDistinct(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "from_user_id", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	users := []map[string]any{
+		{"user_id": "user-1"},
+		{"user_id": "user-2"},
+		{"user_id": "user-3"},
+		{"user_id": "user-4"},
+	}
+	refs.add("users", users)
+
+	// receiver = user-1, ask for 3 distinct senders (should be user-2/3/4 in some order, never user-1)
+	row := map[string]any{"user_id": "user-1"}
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		v, err := g.Pattern(col, `{{ RefDistinct "users" "user_id" "user_id" }}`, i, row, refs)
+		if err != nil {
+			t.Fatalf("Pattern (i=%d): %v", i, err)
+		}
+		s := v.(string)
+		if s == "user-1" {
+			t.Errorf("RefDistinct picked self-reference user-1 at i=%d", i)
+		}
+		if seen[s] {
+			t.Errorf("RefDistinct picked duplicate %q at i=%d (seen=%v)", s, i, seen)
+		}
+		seen[s] = true
+	}
+	if len(seen) != 3 {
+		t.Errorf("expected 3 distinct picks, got %d: %v", len(seen), seen)
+	}
+
+	// 4th pick should exhaust (only self-ref left)
+	if _, err := g.Pattern(col, `{{ RefDistinct "users" "user_id" "user_id" }}`, 3, row, refs); err == nil {
+		t.Error("expected exhaustion error on 4th distinct pick")
+	}
+
+	// switching to a different receiver scope starts fresh
+	row2 := map[string]any{"user_id": "user-2"}
+	v, err := g.Pattern(col, `{{ RefDistinct "users" "user_id" "user_id" }}`, 0, row2, refs)
+	if err != nil {
+		t.Fatalf("Pattern with new scope: %v", err)
+	}
+	if v.(string) == "user-2" {
+		t.Errorf("RefDistinct picked self-reference user-2 in new scope")
+	}
+}
+
+func TestGeneratorPatternRefMissingColumn(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{{"user_id": "u1"}})
+	if _, err := g.Pattern(col, `{{ Ref "users" "missing" }}`, 0, nil, refs); err == nil {
+		t.Fatal("expected error when referenced column is missing")
+	}
+}
+
+func TestGeneratorPatternRefDistinctMissingColumn(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{{"user_id": "u1"}})
+	row := map[string]any{"scope": "s1"}
+	if _, err := g.Pattern(col, `{{ RefDistinct "users" "missing" "scope" }}`, 0, row, refs); err == nil {
+		t.Fatal("expected error when referenced column is missing in RefDistinct")
+	}
+}
+
+// Same scope value with two different columns must not share the used set:
+// exhausting the "id" pool must not block picks from the "name" pool.
+func TestGeneratorPatternRefDistinctPerColumnUsedSet(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "x", Type: ColumnType{Base: ast.StringTypeName}}
+	refs := newRefRegistry()
+	refs.add("users", []map[string]any{
+		{"id": "u1", "name": "Alice"},
+		{"id": "u2", "name": "Bob"},
+	})
+	row := map[string]any{"scope": "s1"}
+
+	seenIds := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		v, err := g.Pattern(col, `{{ RefDistinct "users" "id" "scope" }}`, i, row, refs)
+		if err != nil {
+			t.Fatalf("id pick %d: %v", i, err)
+		}
+		seenIds[v.(string)] = true
+	}
+	if len(seenIds) != 2 {
+		t.Errorf("expected both ids picked, got %v", seenIds)
+	}
+	// "id" pool is now exhausted under scope=s1; this would fail.
+	if _, err := g.Pattern(col, `{{ RefDistinct "users" "id" "scope" }}`, 2, row, refs); err == nil {
+		t.Fatal("expected id pool exhaustion under scope=s1")
+	}
+
+	// But picks from the "name" column under the same scope must still work,
+	// because the used set is keyed per (table, column, scope, scopeVal).
+	seenNames := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		v, err := g.Pattern(col, `{{ RefDistinct "users" "name" "scope" }}`, i, row, refs)
+		if err != nil {
+			t.Fatalf("name pick %d (should not share used set with id): %v", i, err)
+		}
+		seenNames[v.(string)] = true
+	}
+	if len(seenNames) != 2 {
+		t.Errorf("expected both names picked, got %v", seenNames)
 	}
 }
 

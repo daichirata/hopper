@@ -66,7 +66,8 @@ func (r *Runner) Run(ctx context.Context, config *Config) ([]Result, error) {
 		r.OnStart(names)
 	}
 
-	if err := r.generate(order); err != nil {
+	refs := newRefRegistry()
+	if err := r.generate(order, refs); err != nil {
 		return nil, err
 	}
 
@@ -184,7 +185,7 @@ func dependencies(t *Table) []string {
 	return deps
 }
 
-func (r *Runner) generate(order []*tableData) error {
+func (r *Runner) generate(order []*tableData, refs *refRegistry) error {
 	for _, gt := range order {
 		if gt.total <= 0 {
 			return fmt.Errorf("table %q: missing row count (e.g. --table %s=N)", gt.table.Name, gt.table.Name)
@@ -197,17 +198,18 @@ func (r *Runner) generate(order []*tableData) error {
 				}
 				parentRow = gt.parent.generated[i%len(gt.parent.generated)]
 			}
-			row, err := r.generateRow(gt, parentRow, i)
+			row, err := r.generateRow(gt, parentRow, i, refs)
 			if err != nil {
 				return err
 			}
 			gt.generated = append(gt.generated, row)
 		}
+		refs.add(gt.table.Name, gt.generated)
 	}
 	return nil
 }
 
-func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int) (map[string]any, error) {
+func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int, refs *refRegistry) (map[string]any, error) {
 	fkValues := map[string]any{}
 	for _, fk := range gt.fkRefs {
 		if len(fk.parent.generated) == 0 {
@@ -237,7 +239,7 @@ func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int)
 			continue
 		}
 		if pattern, ok := gt.columns[col.Name]; ok {
-			v, err := r.gen.Pattern(col, pattern, index, row)
+			v, err := r.gen.Pattern(col, pattern, index, row, refs)
 			if err != nil {
 				return nil, err
 			}

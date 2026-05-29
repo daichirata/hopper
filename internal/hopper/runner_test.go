@@ -21,7 +21,7 @@ func tableDatas(t *testing.T, r *Runner, cfg *Config) map[string]*tableData {
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	if err := r.generate(order); err != nil {
+	if err := r.generate(order, newRefRegistry()); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	m := map[string]*tableData{}
