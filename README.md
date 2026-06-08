@@ -160,6 +160,9 @@ Every column is filled automatically; use `--set` to override specific ones.
 | `{{ Index }}`                                  | row sequence number (0-based)             |
 | `{{ Null }}`                                   | leave the column `NULL` (nullable only)   |
 | `{{ add Index 1 }}`                            | arithmetic: `add` `sub` `mul` `div` `mod` |
+| `{{ printf "%010d" Index }}`                   | format with Go's `printf` (e.g. zero-pad) |
+| `{{ index (SliceString "a" "b" "c") (mod Index 3) }}` | pick by index (round-robin over rows) |
+| `{{ if eq (mod Index 2) 0 }}A{{ else }}B{{ end }}` | conditional with `if` / `eq`          |
 | `{{ Col "FirstName" }}`                        | value of another column in the same row   |
 | `{{ Ref "<table>" "<column>" }}`               | random value picked from another generated table |
 | `{{ RefDistinct "<table>" "<column>" "<scope>" }}` | same, but unique per scope + no self-reference |
@@ -169,6 +172,13 @@ else is a gofakeit function (any [gofakeit function](https://github.com/brianvoe
 works). Templates can be combined (`{{ FirstName }}-{{ Index }}`), and the result is
 converted to the column's type — use a numeric template for numeric columns. ARRAY
 columns get a single templated element (or a few random ones by default).
+
+Templates are Go [`text/template`](https://pkg.go.dev/text/template), so its built-ins are
+available too: `printf` (formatting, e.g. zero-padded sequential ids
+`--set 'Singers.SingerId=S-{{ printf "%06d" Index }}'`), `index` (pick a slice element by
+position, e.g. deterministic round-robin `{{ index (SliceString "rock" "jazz" "pop") (mod Index 3) }}`),
+and `if` / `eq` for conditionals. Combine them with `{{ Index }}` and the arithmetic helpers
+for deterministic, per-row values.
 
 `{{ Null }}` makes the column `NULL`. Combined with the conditional helpers it gives
 per-column control over which rows are `NULL` — e.g. leaving every third row's value unset:
