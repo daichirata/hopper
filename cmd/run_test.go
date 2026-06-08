@@ -30,6 +30,27 @@ func TestProgressBar(t *testing.T) {
 	}
 }
 
+func TestSplitNullRates(t *testing.T) {
+	global, cols, err := splitNullRates([]string{"0.3", "Albums.MarketingBudget=0.5", "Songs.Duration=0.1"})
+	if err != nil {
+		t.Fatalf("splitNullRates: %v", err)
+	}
+	if global != 0.3 {
+		t.Errorf("global = %v, want 0.3", global)
+	}
+	if len(cols) != 2 {
+		t.Errorf("cols = %v, want 2 entries", cols)
+	}
+}
+
+func TestSplitNullRatesInvalid(t *testing.T) {
+	for _, flags := range [][]string{{"2"}, {"x"}, {"-0.1"}} {
+		if _, _, err := splitNullRates(flags); err == nil {
+			t.Errorf("splitNullRates(%v): want error, got nil", flags)
+		}
+	}
+}
+
 func TestReporterLoadNonTTY(t *testing.T) {
 	var buf bytes.Buffer
 	r := &reporter{w: &buf, tty: false}

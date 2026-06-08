@@ -190,6 +190,47 @@ func TestGeneratorPatternColRef(t *testing.T) {
 	}
 }
 
+func TestGeneratorPatternNull(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "PushedAt", Type: ColumnType{Base: ast.TimestampTypeName}}
+	v, err := g.Pattern(col, "{{ Null }}", 0, nil, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if v != nil {
+		t.Errorf("Pattern = %v, want nil", v)
+	}
+}
+
+func TestGeneratorPatternNullConditional(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "PushedAt", Type: ColumnType{Base: ast.Int64TypeName}}
+	pattern := `{{ if eq (mod Index 3) 0 }}{{ Null }}{{ else }}{{ Index }}{{ end }}`
+	for i := 0; i < 9; i++ {
+		v, err := g.Pattern(col, pattern, i, nil, nil)
+		if err != nil {
+			t.Fatalf("Pattern(%d): %v", i, err)
+		}
+		if i%3 == 0 {
+			if v != nil {
+				t.Errorf("index %d: Pattern = %v, want nil", i, v)
+			}
+			continue
+		}
+		if v.(int64) != int64(i) {
+			t.Errorf("index %d: Pattern = %v, want %d", i, v, i)
+		}
+	}
+}
+
+func TestGeneratorPatternNullNotNull(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "PushedAt", Type: ColumnType{Base: ast.TimestampTypeName}, NotNull: true}
+	if _, err := g.Pattern(col, "{{ Null }}", 0, nil, nil); err == nil {
+		t.Fatal("Pattern on NOT NULL column: want error, got nil")
+	}
+}
+
 func TestGeneratorCommitTimestamp(t *testing.T) {
 	g := newTestGen()
 	col := &Column{Name: "CreatedAt", Type: ColumnType{Base: ast.TimestampTypeName}, AllowCommitTimestamp: true}

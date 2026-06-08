@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,17 +29,18 @@ var (
 			noInfer, _ := cmd.Flags().GetBool("no-infer")
 			clear, _ := cmd.Flags().GetBool("clear")
 			clearBatch, _ := cmd.Flags().GetInt("clear-batch-size")
-			nullRate, _ := cmd.Flags().GetFloat64("null-rate")
+			nullRateFlags, _ := cmd.Flags().GetStringArray("null-rate")
 			verbose, _ := cmd.Flags().GetBool("verbose")
 
-			if nullRate < 0 || nullRate > 1 {
-				return fmt.Errorf("--null-rate must be between 0 and 1, got %v", nullRate)
+			nullRate, nullRateCols, err := splitNullRates(nullRateFlags)
+			if err != nil {
+				return err
 			}
 			if clearBatch < 1 {
 				return fmt.Errorf("--clear-batch-size must be >= 1, got %d", clearBatch)
 			}
 
-			config, err := buildConfig(configPath, tableFlags, setFlags)
+			config, err := buildConfig(configPath, tableFlags, setFlags, nullRateCols)
 			if err != nil {
 				return err
 			}
@@ -88,7 +91,27 @@ var (
 	}
 )
 
-func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Config, error) {
+func splitNullRates(flags []string) (float64, []string, error) {
+	global := 0.0
+	var cols []string
+	for _, f := range flags {
+		if strings.Contains(f, "=") {
+			cols = append(cols, f)
+			continue
+		}
+		rate, err := strconv.ParseFloat(strings.TrimSpace(f), 64)
+		if err != nil {
+			return 0, nil, fmt.Errorf("invalid --null-rate %q: %w", f, err)
+		}
+		if rate < 0 || rate > 1 {
+			return 0, nil, fmt.Errorf("--null-rate must be between 0 and 1, got %v", rate)
+		}
+		global = rate
+	}
+	return global, cols, nil
+}
+
+func buildConfig(configPath string, tableFlags, setFlags, nullRateCols []string) (*hopper.Config, error) {
 	config := &hopper.Config{}
 	if configPath != "" {
 		data, err := os.ReadFile(configPath)
@@ -101,6 +124,9 @@ func buildConfig(configPath string, tableFlags, setFlags []string) (*hopper.Conf
 		}
 	}
 	if err := config.ApplyFlags(tableFlags, setFlags); err != nil {
+		return nil, err
+	}
+	if err := config.ApplyNullRates(nullRateCols); err != nil {
 		return nil, err
 	}
 	config.Normalize()
@@ -134,7 +160,7 @@ func init() {
 	runCmd.Flags().Bool("no-infer", false, "disable inferring a gofakeit function from unset column names")
 	runCmd.Flags().Bool("clear", false, "delete existing rows from each target table before loading")
 	runCmd.Flags().Int("clear-batch-size", hopper.DefaultClearBatchSize, "max rows per Delete commit during --clear (auto-halved on too-many-mutations)")
-	runCmd.Flags().Float64("null-rate", 0, "probability (0-1) of setting a nullable, unset column to NULL")
+	runCmd.Flags().StringArray("null-rate", nil, "probability (0-1) of setting a nullable column to NULL; global as RATE or per-column as TABLE.COLUMN=RATE (repeatable)")
 	runCmd.Flags().BoolP("verbose", "v", false, "print extra runtime information on stderr (e.g. the seed)")
 
 	rootCmd.AddCommand(runCmd)

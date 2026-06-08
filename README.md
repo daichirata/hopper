@@ -81,7 +81,7 @@ Generate dummy data and load it into Spanner.
 | `--seed N`                    | random seed (`0` = time-based) |
 | `--dry-run`                   | generate rows but do not insert (prints a few sample rows) |
 | `--no-infer`                  | disable inferring a gofakeit function from column names |
-| `--null-rate F`               | probability (0–1) of leaving a nullable column `NULL` |
+| `--null-rate F`               | probability (0–1) of leaving a nullable column `NULL`; pass `TABLE.COL=F` to set it for one column (repeatable) |
 | `--clear`                     | delete existing rows from each target table before loading |
 | `--clear-batch-size N`        | max rows per Delete commit during `--clear` (default `100`; auto-halved on `too-many-mutations`) |
 | `-v`, `--verbose`             | print extra runtime info on stderr (e.g. the seed used) |
@@ -130,7 +130,11 @@ Every column is filled automatically; use `--set` to override specific ones.
   value is used. Add `--no-infer` to disable name inference.
 - **Commit-timestamp** columns (`OPTIONS (allow_commit_timestamp=true)`) are set to the pending commit timestamp.
 - **Generated / stored** columns are skipped.
-- `--null-rate` (0–1) randomly leaves nullable columns NULL.
+- `--null-rate` (0–1) randomly leaves nullable columns NULL. A bare `--null-rate 0.3`
+  applies to every nullable column; `--null-rate 'Albums.MarketingBudget=0.5'` sets the
+  rate for a single column (and overrides the global rate for it, so `=0` opts a column
+  out). A rate combines with a `--set` template: the column is NULL at that rate, and
+  otherwise filled by the template. For deterministic placement use `{{ Null }}` instead.
 
 **Overrides** — `--set TABLE.COLUMN=TEMPLATE`, a
 [gofakeit](https://github.com/brianvoe/gofakeit#templates) template using `{{ }}`:
@@ -154,6 +158,7 @@ Every column is filled automatically; use `--set` to override specific ones.
 | `{{ FirstName }}` `{{ Email }}` `{{ Phone }}`  | realistic fake data                       |
 | `{{ Sentence 5 }}`                             | a 5-word sentence                         |
 | `{{ Index }}`                                  | row sequence number (0-based)             |
+| `{{ Null }}`                                   | leave the column `NULL` (nullable only)   |
 | `{{ add Index 1 }}`                            | arithmetic: `add` `sub` `mul` `div` `mod` |
 | `{{ Col "FirstName" }}`                        | value of another column in the same row   |
 | `{{ Ref "<table>" "<column>" }}`               | random value picked from another generated table |
@@ -164,6 +169,11 @@ else is a gofakeit function (any [gofakeit function](https://github.com/brianvoe
 works). Templates can be combined (`{{ FirstName }}-{{ Index }}`), and the result is
 converted to the column's type — use a numeric template for numeric columns. ARRAY
 columns get a single templated element (or a few random ones by default).
+
+`{{ Null }}` makes the column `NULL`. Combined with the conditional helpers it gives
+per-column control over which rows are `NULL` — e.g. leaving every third row's value unset:
+`--set 'Albums.MarketingBudget={{ if eq (mod Index 3) 0 }}{{ Null }}{{ else }}{{ Number 0 1000000 }}{{ end }}'`.
+Using it on a `NOT NULL` column is an error.
 
 `{{ Col "OtherColumn" }}` reads a column already generated for the same row, so you can
 derive one value from another (`--set 'Singers.Nickname={{ Col "FirstName" }}-{{ Index }}'`).
@@ -217,8 +227,18 @@ tables:
     rows: 1000
     columns:
       AlbumTitle: "{{ Sentence 3 }}"
-      MarketingBudget: "{{ Number 0 1000000 }}"
+      MarketingBudget:
+        template: "{{ Number 0 1000000 }}"
+        null_rate: 0.3
+      ReleaseDate:
+        null_rate: 0.5
 ```
+
+A column value can be either a template string (shorthand for `template:`) or an object with
+`template` and/or `null_rate`. `null_rate` (0–1) is the per-column NULL probability — the YAML
+form of `--null-rate 'TABLE.COL=F'`. Given with a `template`, the column is NULL at that rate
+and otherwise filled by the template; given alone, the column uses its default value at that
+rate. For deterministic NULL placement, use `{{ Null }}` in the template instead.
 
 ```
 hopper run spanner://projects/p/instances/i/databases/d --config hopper.yaml

@@ -17,6 +17,8 @@ import (
 
 const defaultStringLen = 12
 
+const nullSentinel = "\x00hopper:null\x00"
+
 type Generator struct {
 	faker *gofakeit.Faker
 }
@@ -72,6 +74,7 @@ func refRows(refs *refRegistry, table, column string) ([]map[string]any, error) 
 
 func (g *Generator) Pattern(col *Column, pattern string, index int, row map[string]any, refs *refRegistry) (any, error) {
 	funcs := template.FuncMap{
+		"Null":  func() string { return nullSentinel },
 		"Index": func() int { return index },
 		"Col": func(name string) any {
 			if v := row[name]; v != nil {
@@ -143,6 +146,12 @@ func (g *Generator) Pattern(col *Column, pattern string, index int, row map[stri
 	s, err := g.faker.Template(pattern, &gofakeit.TemplateOptions{Funcs: funcs})
 	if err != nil {
 		return nil, fmt.Errorf("column %s: %w", col.Name, err)
+	}
+	if strings.TrimSpace(s) == nullSentinel {
+		if col.NotNull {
+			return nil, fmt.Errorf("column %s: Null on NOT NULL column", col.Name)
+		}
+		return nil, nil
 	}
 	v, err := g.coerce(col, s)
 	if err != nil {

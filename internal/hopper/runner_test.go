@@ -287,6 +287,88 @@ func TestRunnerNullRate(t *testing.T) {
 	}
 }
 
+func TestRunnerNullRatePerColumn(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Albums=20"}, nil)
+	if err := cfg.ApplyNullRates([]string{"Albums.MarketingBudget=1"}); err != nil {
+		t.Fatalf("ApplyNullRates: %v", err)
+	}
+
+	m := tableDatas(t, r, cfg)
+	for _, row := range m["Albums"].generated {
+		if row["MarketingBudget"] != nil {
+			t.Errorf("MarketingBudget = %v, want NULL with per-column rate 1.0", row["MarketingBudget"])
+		}
+		if row["AlbumTitle"] == nil {
+			t.Error("AlbumTitle must not be NULL (no rate set, global rate 0)")
+		}
+	}
+}
+
+func TestRunnerNullRatePerColumnOverridesGlobal(t *testing.T) {
+	r := newDryRunner(t)
+	r.NullRate = 1.0
+	cfg, _ := ConfigFromFlags([]string{"Albums=20"}, nil)
+	if err := cfg.ApplyNullRates([]string{"Albums.MarketingBudget=0"}); err != nil {
+		t.Fatalf("ApplyNullRates: %v", err)
+	}
+
+	m := tableDatas(t, r, cfg)
+	for _, row := range m["Albums"].generated {
+		if row["MarketingBudget"] == nil {
+			t.Error("MarketingBudget must not be NULL: per-column rate 0 overrides global 1.0")
+		}
+	}
+}
+
+func TestRunnerNullRateNotNullColumn(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Singers=10"}, nil)
+	if err := cfg.ApplyNullRates([]string{"Singers.SingerId=0.5"}); err != nil {
+		t.Fatalf("ApplyNullRates: %v", err)
+	}
+	if _, err := r.plan(cfg); err == nil {
+		t.Fatal("plan with null rate on NOT NULL column: want error, got nil")
+	}
+}
+
+func TestRunnerNullRateWithTemplateAllNull(t *testing.T) {
+	r := newDryRunner(t)
+	cfg, _ := ConfigFromFlags([]string{"Albums=20"}, []string{"Albums.MarketingBudget={{ Number 1 100 }}"})
+	if err := cfg.ApplyNullRates([]string{"Albums.MarketingBudget=1"}); err != nil {
+		t.Fatalf("ApplyNullRates: %v", err)
+	}
+
+	m := tableDatas(t, r, cfg)
+	for _, row := range m["Albums"].generated {
+		if row["MarketingBudget"] != nil {
+			t.Errorf("MarketingBudget = %v, want NULL: rate 1.0 wins over the template", row["MarketingBudget"])
+		}
+	}
+}
+
+func TestRunnerNullRateWithTemplateComposes(t *testing.T) {
+	r := newDryRunner(t)
+	r.NullRate = 0.0
+	cfg, _ := ConfigFromFlags([]string{"Albums=200"}, []string{"Albums.MarketingBudget={{ Number 1 100 }}"})
+	if err := cfg.ApplyNullRates([]string{"Albums.MarketingBudget=0.5"}); err != nil {
+		t.Fatalf("ApplyNullRates: %v", err)
+	}
+
+	m := tableDatas(t, r, cfg)
+	var nulls, values int
+	for _, row := range m["Albums"].generated {
+		if row["MarketingBudget"] == nil {
+			nulls++
+		} else {
+			values++
+		}
+	}
+	if nulls == 0 || values == 0 {
+		t.Errorf("rate 0.5 over a template should yield a mix; got %d NULL, %d values", nulls, values)
+	}
+}
+
 func TestRunnerDryRunSample(t *testing.T) {
 	r := newDryRunner(t)
 	r.DryRun = true
