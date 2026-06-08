@@ -13,6 +13,10 @@ foreign-key relationships are handled automatically.
 
 The examples below use the [Spanner sample schema](https://cloud.google.com/spanner/docs/schema-and-data-model) (`Singers` → `Albums` → `Songs`, interleaved).
 
+For task-oriented recipes organized by schema pattern (logical references, enum/skewed
+columns, nullable columns and `NULL_FILTERED` indexes, query-optimization datasets), see
+[docs/recipes.md](docs/recipes.md).
+
 ## Installation
 
 ```
