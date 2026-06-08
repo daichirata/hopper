@@ -14,9 +14,10 @@ type Config struct {
 }
 
 type TableSpec struct {
-	Name    string
-	Rows    int
-	Columns map[string]string
+	Name      string
+	Rows      int
+	Columns   map[string]string
+	NullRates map[string]float64
 }
 
 func (c *Config) Normalize() {
@@ -39,8 +40,29 @@ type yamlConfig struct {
 }
 
 type yamlTable struct {
-	Rows    int               `yaml:"rows"`
-	Columns map[string]string `yaml:"columns"`
+	Rows    int                   `yaml:"rows"`
+	Columns map[string]columnSpec `yaml:"columns"`
+}
+
+type columnSpec struct {
+	Template string
+	NullRate *float64
+}
+
+func (cs *columnSpec) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		return node.Decode(&cs.Template)
+	}
+	var raw struct {
+		Template string   `yaml:"template"`
+		NullRate *float64 `yaml:"null_rate"`
+	}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	cs.Template = raw.Template
+	cs.NullRate = raw.NullRate
+	return nil
 }
 
 func ConfigFromYAML(data []byte) (*Config, error) {
@@ -50,7 +72,25 @@ func ConfigFromYAML(data []byte) (*Config, error) {
 	}
 	c := &Config{}
 	for name, yt := range yc.Tables {
-		c.Tables = append(c.Tables, &TableSpec{Name: name, Rows: yt.Rows, Columns: yt.Columns})
+		ts := &TableSpec{Name: name, Rows: yt.Rows}
+		for col, spec := range yt.Columns {
+			if spec.Template != "" {
+				if ts.Columns == nil {
+					ts.Columns = map[string]string{}
+				}
+				ts.Columns[col] = spec.Template
+			}
+			if spec.NullRate != nil {
+				if *spec.NullRate < 0 || *spec.NullRate > 1 {
+					return nil, fmt.Errorf("table %q column %q: null_rate must be between 0 and 1, got %v", name, col, *spec.NullRate)
+				}
+				if ts.NullRates == nil {
+					ts.NullRates = map[string]float64{}
+				}
+				ts.NullRates[col] = *spec.NullRate
+			}
+		}
+		c.Tables = append(c.Tables, ts)
 	}
 	c.Normalize()
 	return c, nil
@@ -83,6 +123,21 @@ func (c *Config) ApplyFlags(tables []string, sets []string) error {
 			node.Columns = map[string]string{}
 		}
 		node.Columns[col] = pattern
+	}
+	return nil
+}
+
+func (c *Config) ApplyNullRates(specs []string) error {
+	for _, s := range specs {
+		table, col, rate, err := parseNullRateFlag(s)
+		if err != nil {
+			return err
+		}
+		node := c.ensureTable(table)
+		if node.NullRates == nil {
+			node.NullRates = map[string]float64{}
+		}
+		node.NullRates[col] = rate
 	}
 	return nil
 }
@@ -121,4 +176,28 @@ func parseSetFlag(s string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("invalid --set key %q", key)
 	}
 	return table, col, pattern, nil
+}
+
+func parseNullRateFlag(s string) (string, string, float64, error) {
+	key, rateStr, ok := strings.Cut(s, "=")
+	if !ok {
+		return "", "", 0, fmt.Errorf("invalid --null-rate %q (expected TABLE.COLUMN=RATE)", s)
+	}
+	segs := strings.Split(strings.TrimSpace(key), ".")
+	if len(segs) < 2 {
+		return "", "", 0, fmt.Errorf("invalid --null-rate key %q (expected TABLE.COLUMN)", key)
+	}
+	table := segs[len(segs)-2]
+	col := segs[len(segs)-1]
+	if table == "" || col == "" {
+		return "", "", 0, fmt.Errorf("invalid --null-rate key %q", key)
+	}
+	rate, err := strconv.ParseFloat(strings.TrimSpace(rateStr), 64)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("invalid rate in --null-rate %q: %w", s, err)
+	}
+	if rate < 0 || rate > 1 {
+		return "", "", 0, fmt.Errorf("invalid rate in --null-rate %q: must be between 0 and 1", s)
+	}
+	return table, col, rate, nil
 }

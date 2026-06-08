@@ -41,6 +41,7 @@ func NewRunner(schema *Schema, gen *Generator, client *Client) *Runner {
 type tableData struct {
 	table     *Table
 	columns   map[string]string
+	nullRates map[string]float64
 	total     int
 	parent    *tableData
 	fkRefs    []*fkRef
@@ -131,7 +132,16 @@ func (r *Runner) plan(config *Config) ([]*tableData, error) {
 				return nil, fmt.Errorf("table %q has no column %q", s.Name, col)
 			}
 		}
-		tables[s.Name] = &tableData{table: t, columns: s.Columns, total: s.Rows}
+		for col := range s.NullRates {
+			c, ok := t.Column(col)
+			if !ok {
+				return nil, fmt.Errorf("table %q has no column %q", s.Name, col)
+			}
+			if c.NotNull {
+				return nil, fmt.Errorf("table %q column %q is NOT NULL, cannot set a null rate", s.Name, col)
+			}
+		}
+		tables[s.Name] = &tableData{table: t, columns: s.Columns, nullRates: s.NullRates, total: s.Rows}
 	}
 
 	queue := sortedTableKeys(tables)
@@ -239,6 +249,10 @@ func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int,
 			continue
 		}
 		if pattern, ok := gt.columns[col.Name]; ok {
+			if r.rollNull(gt, col) {
+				row[col.Name] = nil
+				continue
+			}
 			v, err := r.gen.Pattern(col, pattern, index, row, refs)
 			if err != nil {
 				return nil, err
@@ -254,7 +268,7 @@ func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int,
 			row[col.Name] = v
 			continue
 		}
-		if !col.NotNull && r.NullRate > 0 && r.gen.Float() < r.NullRate {
+		if r.rollNull(gt, col) {
 			row[col.Name] = nil
 			continue
 		}
@@ -271,6 +285,17 @@ func (r *Runner) generateRow(gt *tableData, parentRow map[string]any, index int,
 		row[col.Name] = v
 	}
 	return row, nil
+}
+
+func (r *Runner) rollNull(gt *tableData, col *Column) bool {
+	if col.NotNull {
+		return false
+	}
+	rate := r.NullRate
+	if pc, ok := gt.nullRates[col.Name]; ok {
+		rate = pc
+	}
+	return rate > 0 && r.gen.Float() < rate
 }
 
 func (r *Runner) insertTable(ctx context.Context, gt *tableData) error {
