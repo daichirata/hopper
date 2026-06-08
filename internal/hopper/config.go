@@ -161,19 +161,27 @@ func parseTableFlag(s string) (string, int, error) {
 	return name, n, nil
 }
 
+func parseColumnKey(flag, key string) (string, string, error) {
+	segs := strings.Split(strings.TrimSpace(key), ".")
+	if len(segs) < 2 {
+		return "", "", fmt.Errorf("invalid --%s key %q (expected TABLE.COLUMN)", flag, key)
+	}
+	table := segs[len(segs)-2]
+	col := segs[len(segs)-1]
+	if table == "" || col == "" {
+		return "", "", fmt.Errorf("invalid --%s key %q", flag, key)
+	}
+	return table, col, nil
+}
+
 func parseSetFlag(s string) (string, string, string, error) {
 	key, pattern, ok := strings.Cut(s, "=")
 	if !ok {
 		return "", "", "", fmt.Errorf("invalid --set %q (expected TABLE.COLUMN=PATTERN)", s)
 	}
-	segs := strings.Split(strings.TrimSpace(key), ".")
-	if len(segs) < 2 {
-		return "", "", "", fmt.Errorf("invalid --set key %q (expected TABLE.COLUMN)", key)
-	}
-	table := segs[len(segs)-2]
-	col := segs[len(segs)-1]
-	if table == "" || col == "" {
-		return "", "", "", fmt.Errorf("invalid --set key %q", key)
+	table, col, err := parseColumnKey("set", key)
+	if err != nil {
+		return "", "", "", err
 	}
 	return table, col, pattern, nil
 }
@@ -183,14 +191,9 @@ func parseNullRateFlag(s string) (string, string, float64, error) {
 	if !ok {
 		return "", "", 0, fmt.Errorf("invalid --null-rate %q (expected TABLE.COLUMN=RATE)", s)
 	}
-	segs := strings.Split(strings.TrimSpace(key), ".")
-	if len(segs) < 2 {
-		return "", "", 0, fmt.Errorf("invalid --null-rate key %q (expected TABLE.COLUMN)", key)
-	}
-	table := segs[len(segs)-2]
-	col := segs[len(segs)-1]
-	if table == "" || col == "" {
-		return "", "", 0, fmt.Errorf("invalid --null-rate key %q", key)
+	table, col, err := parseColumnKey("null-rate", key)
+	if err != nil {
+		return "", "", 0, err
 	}
 	rate, err := strconv.ParseFloat(strings.TrimSpace(rateStr), 64)
 	if err != nil {
