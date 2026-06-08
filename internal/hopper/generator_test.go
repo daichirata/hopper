@@ -56,6 +56,49 @@ func TestGeneratorPatternArithmetic(t *testing.T) {
 	}
 }
 
+func TestGeneratorPatternPrintf(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Id", Type: ColumnType{Base: ast.StringTypeName}}
+	v, err := g.Pattern(col, `user-{{ printf "%010d" Index }}`, 7, nil, nil)
+	if err != nil {
+		t.Fatalf("Pattern: %v", err)
+	}
+	if v.(string) != "user-0000000007" {
+		t.Errorf("Pattern = %q, want user-0000000007", v)
+	}
+}
+
+func TestGeneratorPatternIndexSelect(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Category", Type: ColumnType{Base: ast.StringTypeName}}
+	pattern := `{{ index (SliceString "a" "b" "c") (mod Index 3) }}`
+	want := []string{"a", "b", "c", "a", "b", "c"}
+	for i, w := range want {
+		v, err := g.Pattern(col, pattern, i, nil, nil)
+		if err != nil {
+			t.Fatalf("Pattern(%d): %v", i, err)
+		}
+		if v.(string) != w {
+			t.Errorf("index %d: Pattern = %q, want %q", i, v, w)
+		}
+	}
+}
+
+func TestGeneratorPatternConditional(t *testing.T) {
+	g := newTestGen()
+	col := &Column{Name: "Label", Type: ColumnType{Base: ast.StringTypeName}}
+	pattern := `{{ if eq (mod Index 2) 0 }}even{{ else }}odd{{ end }}`
+	for i, w := range []string{"even", "odd", "even", "odd"} {
+		v, err := g.Pattern(col, pattern, i, nil, nil)
+		if err != nil {
+			t.Fatalf("Pattern(%d): %v", i, err)
+		}
+		if v.(string) != w {
+			t.Errorf("index %d: Pattern = %q, want %q", i, v, w)
+		}
+	}
+}
+
 func TestGeneratorUnique(t *testing.T) {
 	g := newTestGen()
 
